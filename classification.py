@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 from PIL import Image
@@ -128,13 +128,13 @@ class my_Data_Set(nn.Module):
 # 生成Pytorch所需的DataLoader数据输入格式
 train_Data = my_Data_Set(r'public/train_label.txt', transform=data_transforms['train'], loader=Load_Image_Information)
 
-# TODO: There is no validation label?
+# TODO: There is no validation label? Define the validation data clasee
 # val_Data = my_Data_Set(r'val.txt路径', transform=data_transforms['val'], loader=Load_Image_Information)
 
 train_DataLoader = DataLoader(train_Data, batch_size=10, shuffle=True)
 # val_DataLoader = DataLoader(val_Data, batch_size=10)
 
-dataloaders = {'train':train_DataLoader}
+dataloaders = {'train':train_DataLoader}#,
                # 'val':val_DataLoader}
 # 读取数据集大小
 dataset_sizes = {'train': train_Data.__len__()}
@@ -152,6 +152,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
         # 每训练一个epoch，验证一下网络模型
         # for phase in ['train', 'val']:
+        # for phase in ['train']:
         for phase in ['train']:
             running_loss = 0.0
             running_precision = 0.0
@@ -276,6 +277,8 @@ def calculate_acuracy_mode_two(model_pred, labels):
     return precision, recall
 
 
+evaluate = True
+
 # 精调AlexNet
 if __name__ == '__main__':
 
@@ -309,9 +312,16 @@ if __name__ == '__main__':
     # TODO: Optimizer: SGD
     optimizer_ft = torch.optim.SGD(params, momentum=0.9)
 
-    # 定义学习率的更新方式，每5个epoch修改一次学习率
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.1)
-    train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=10)
+    if evaluate:
+        ##  use the trained model to do the classification
+        # load the trained model
+        model.load_state_dict(torch.load("The_9_epoch_model.pklThemodel_AlexNet.pkl"))  # model.load_state_dict()函数把加载的权重复制到模型的权重中去
+        exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.1)
+        train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=10)
+    else:
+        # 定义学习率的更新方式，每5个epoch修改一次学习率
+        exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.1)
+        train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=10)
 
 # cifar10_train = torchvision.datasets.CIFAR10(root='./', train=True, download=True, transform=transform_train)
 # cifar10_test = torchvision.datasets.CIFAR10(root='./', train=False, download=True, transform=transform_test)
