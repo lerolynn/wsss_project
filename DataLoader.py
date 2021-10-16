@@ -21,8 +21,7 @@ from pathlib import Path
 train_Data = my_Data_Set(r'public/train_label.txt', transform=data_transforms['train'], loader=Load_Image_Information_Train)
 
 train_DataLoader = DataLoader(train_Data,
-                              batch_size=batch_size,
-                              sampler=train_sampler)
+                              batch_size=batch_size)
 '''
 
 # Define the transformers
