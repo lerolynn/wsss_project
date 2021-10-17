@@ -1,2 +1,16 @@
 public
 .idea
+*.pyc
+
+data/train/*
+!data/train/.gitkeep
+
+data/test1/*
+!data/test1/.gitkeep
+
+
+submission/pseudo_label/*
+!submission/pseudo_label/.gitkeep
+
+submission/segmentation/*
+!submission/segmentation/.gitkeep
