@@ -16,6 +16,7 @@ import time
 
 from torch.optim import lr_scheduler
 from pathlib import Path
+from collections import OrderedDict
 
 """
 CS701-Team 9: Multi-class classification model
@@ -26,7 +27,10 @@ Reference: https://blog.csdn.net/MiaoB226/article/details/89504131
 # check if gpu is available
 use_gpu = torch.cuda.is_available()
 evaluate = False
-model_selected = "densenet121"
+# model_selected = "alexnet"
+# model_selected = "densenet"
+model_selected = "resnext"
+
 batch_size = 64
 
 # Define the transformers
@@ -57,7 +61,7 @@ data_transforms = {
 # 定义数据读入
 def Load_Image_Information_Train(path):
     # 图像存储路径
-    image_Root_Dir = r'public/img_dir/train'
+    image_Root_Dir = r'data/train'
     # image_Root_Dir = r'public/img_dir/train'
     # 获取图像的路径
     iamge_Dir = os.path.join(image_Root_Dir, path)
@@ -68,7 +72,7 @@ def Load_Image_Information_Train(path):
 
 def Load_Image_Information_Test(path):
     # 图像存储路径
-    image_Root_Dir = r'public/img_dir/test1'
+    image_Root_Dir = r'data/test1'
 
     # image_Root_Dir = r'public/img_dir/train'
     # 获取图像的路径
@@ -130,8 +134,8 @@ class my_Data_Set(nn.Module):
 
 
 # 生成Pytorch所需的DataLoader数据输入格式
-train_Data = my_Data_Set(r'public/train_label.txt', transform=data_transforms['train'], loader=Load_Image_Information_Train)
-val_Data = my_Data_Set(r'public/val_label.txt', transform=data_transforms['val'], loader=Load_Image_Information_Test)
+train_Data = my_Data_Set(r'data/train_label.txt', transform=data_transforms['train'], loader=Load_Image_Information_Train)
+val_Data = my_Data_Set(r'data/val_label.txt', transform=data_transforms['val'], loader=Load_Image_Information_Test)
 
 # create the validation data
 # Creating data indices for training and validation splits:
@@ -186,8 +190,8 @@ def ListFilesToTxt(dir, file, wildcard, recursion):
                     file.write(name + "\n")
                     break
 def ImageNameGenerator():
-    dir = "public/img_dir/test1"
-    outfile = "public/val_label.txt"
+    dir = "data/test1"
+    outfile = "data/val_label.txt"
 
     val_label_path = Path(outfile)
     val_label_path.touch(exist_ok=True)
@@ -228,7 +232,7 @@ def predict(input, model, device):
 # 计算准确率——方式1
 # 设定一个阈值，当预测的概率值大于这个阈值，则认为这幅图像中含有这类标签
 def calculate_acuracy_mode_one(model_pred, labels):
-    # 注意这里的model_pred是经过sigmoid处理的，sigmoid处理后可以视为预测是这一类的概率
+    model_pred = torch.nn.functional.softmax(model_pred[0], dim=0)
     # 预测结果，大于这个阈值则视为预测正确
     accuracy_th = 0.5
     pred_result = model_pred > accuracy_th
@@ -269,7 +273,7 @@ def calculate_acuracy_mode_two(model_pred, labels):
 ## Classification Model
 # Train and evaluate the network (all layers participate in the training)
 def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
-    Sigmoid_fun = nn.Sigmoid()
+    # Sigmoid_fun = nn.Sigmoid()
     since = time.time()
 
     for epoch in range(num_epochs):
@@ -291,11 +295,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
                 #  调用模型训练
                 model.train()
 
-                # 依次获取所有图像，参与模型训练或测试
                 for data in dataloaders[phase]:
-                    # 获取输入
                     inputs, labels = data
-                    # 判断是否使用gpu
                     if use_gpu:
                         inputs = inputs.cuda()
                         labels = labels.cuda()
@@ -303,13 +304,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
                     # 梯度清零
                     optimizer.zero_grad()
 
-                    # 网络前向运行
                     outputs = model(inputs)
-                    # 计算Loss值
-                    loss = criterion(Sigmoid_fun(outputs), labels)
-
+                    # loss = criterion(Sigmoid_fun(outputs), labels)
+                    loss = criterion(outputs, labels)
                     # 这里根据自己的需求选择模型预测结果准确率的函数
-                    precision, recall = calculate_acuracy_mode_one(Sigmoid_fun(outputs), labels)
+                    precision, recall = calculate_acuracy_mode_one(outputs, labels)
+                    # precision, recall = calculate_acuracy_mode_one(Sigmoid_fun(outputs), labels)
                     # precision, recall = calculate_acuracy_mode_two(Sigmoid_fun(outputs), labels)
                     running_precision += precision
                     running_recall += recall
@@ -407,13 +407,28 @@ if __name__ == '__main__':
         model.classifier = nn.Sequential(*feature_model)
     if model_selected == "densenet121":
         model = models.densenet121(pretrained=True)
-        model.classifier = nn.Linear(1024, 103)
+        classifier = nn.Sequential(OrderedDict([
+            ('fc1', nn.Linear(1024, 103)),
+            # ('relu', nn.ReLU()),
+            # ('fc2', nn.Linear(512, 103)),
+            # ('output', nn.LogSoftmax(dim=1))
+        ]))
+        model.classifier = classifier
+        # model.classifier = nn.Linear(1024, 103)
+
+    if model_selected == "resnext":
+        model = models.resnext101_32x8d(pretrained=True)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 103)
+        for param in model.parameters():
+            param.requires_grad = False
+
     if use_gpu:
         model = model.cuda()
 
     if not evaluate:
-        # 定义损失函数
-        criterion = nn.BCELoss()
+        # criterion = nn.BCELoss()
+        criterion = nn.BCEWithLogitsLoss()
 
         # 为不同层设定不同的学习率
         # fc_params = list(map(id, model.classifier[6].parameters()))
@@ -422,7 +437,7 @@ if __name__ == '__main__':
         params = [{"params": base_params, "lr": 0.0001},
                   {"params": model.parameters(), "lr": 0.001},]
                   # {"params": model.classifier[6].parameters(), "lr": 0.001}, ]
-        # TODO: Optimizer: SGD
+
         optimizer_ft = torch.optim.SGD(params, momentum=0.9)
 
         # 定义学习率的更新方式，每5个epoch修改一次学习率
@@ -436,15 +451,15 @@ if __name__ == '__main__':
                        map_location=torch.device('cpu')
                        )
         )  # load the weights in the models
-        fp = open("public/val_label.txt", 'r')
-        val_predection = open("public/val_prediction.txt", "w")
+        fp = open("data/val_label.txt", 'r')
+        val_predection = open("data/val_prediction.txt", "w")
 
         for line in fp:
             line.strip('\n')
             line.rstrip()
             information = line.split()
             images = (information[0])
-            img = Image.open("public/img_dir/test1/" + images).convert('RGB')
+            img = Image.open("data/test1/" + images).convert('RGB')
             img = data_transforms['val'](img)
             img = img.unsqueeze(0)
             ans = predict(img, model, "cpu")
