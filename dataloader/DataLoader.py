@@ -24,22 +24,14 @@ train_DataLoader = DataLoader(train_Data,
                               batch_size=batch_size)
 '''
 
-# Define the transformers
 data_transforms = {
     'train': transforms.Compose([
-        # resize the image into 256*256
         transforms.Resize(256),
-        # crop the images into size 227*227
         transforms.RandomResizedCrop(227),
-        # flip the image
         transforms.RandomHorizontalFlip(),
-        # transform the image into tensor
         transforms.ToTensor(),
-        # normalize the image
-        # [0.485, 0.456, 0.406]，RGB通道的均值与标准差
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
-    # 测试集需要中心裁剪，甚至不裁剪，直接缩放为224*224for，不需要翻转
     'val': transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(227),
@@ -48,32 +40,17 @@ data_transforms = {
     ]),
 }
 
-### Load Data
-# 定义数据读入
 def Load_Image_Information_Train(path):
-    # 图像存储路径
-    image_Root_Dir = r'public/img_dir/train'
-    # image_Root_Dir = r'public/img_dir/train'
-    # 获取图像的路径
+    image_Root_Dir = r'data/train'
     iamge_Dir = os.path.join(image_Root_Dir, path)
-    # 以RGB格式打开图像
-    # Pytorch DataLoader就是使用PIL所读取的图像格式
-    # 建议就用这种方法读取图像，当读入灰度图像时convert('')
     return Image.open(iamge_Dir).convert('RGB')
 
 def Load_Image_Information_Test(path):
-    # 图像存储路径
-    image_Root_Dir = r'public/img_dir/test1'
-
-    # image_Root_Dir = r'public/img_dir/train'
-    # 获取图像的路径
+    image_Root_Dir = r'data/test1'
     iamge_Dir = os.path.join(image_Root_Dir, path)
-    # 以RGB格式打开图像
-    # Pytorch DataLoader就是使用PIL所读取的图像格式
-    # 建议就用这种方法读取图像，当读入灰度图像时convert('')
     return Image.open(iamge_Dir).convert('RGB')
 
-# 定义自己数据集的数据读入类 | Define the class to load the data
+# Define the class to load the data
 class my_Data_Set(nn.Module):
     def __init__(self, txt, transform=None, target_transform=None, loader=None):
         super(my_Data_Set, self).__init__()

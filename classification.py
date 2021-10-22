@@ -28,12 +28,11 @@ Reference: https://blog.csdn.net/MiaoB226/article/details/89504131
 use_gpu = torch.cuda.is_available()
 evaluate = False
 # model_selected = "alexnet"
-# model_selected = "densenet"
-model_selected = "resnext"
+model_selected = "densenet"
+# model_selected = "resnext"
 
 batch_size = 64
 
-# Define the transformers
 data_transforms = {
     'train': transforms.Compose([
         # resize the image into 256*256
@@ -279,7 +278,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-
         # 每训练一个epoch，验证一下网络模型
         for phase in ['train', 'val', 'test']:
         # for phase in ['train']:
@@ -290,9 +288,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
             batch_num = 0
 
             if phase == 'train':
-                # 学习率更新方式
                 scheduler.step()
-                #  调用模型训练
                 model.train()
 
                 for data in dataloaders[phase]:
@@ -422,13 +418,14 @@ if __name__ == '__main__':
         model.fc = nn.Linear(num_ftrs, 103)
         for param in model.parameters():
             param.requires_grad = False
+        # TODO: The last layer should be the sigmoid function, and then we use BCE loss
 
     if use_gpu:
         model = model.cuda()
 
     if not evaluate:
-        # criterion = nn.BCELoss()
-        criterion = nn.BCEWithLogitsLoss()
+        criterion = nn.BCELoss()
+        # criterion = nn.BCEWithLogitsLoss()
 
         # 为不同层设定不同的学习率
         # fc_params = list(map(id, model.classifier[6].parameters()))
