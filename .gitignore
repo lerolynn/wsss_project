@@ -14,3 +14,6 @@ submission/pseudo_label/*
 
 submission/segmentation/*
 !submission/segmentation/.gitkeep
+
+*.png
+*.jpg
