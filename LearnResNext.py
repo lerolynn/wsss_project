@@ -107,6 +107,7 @@ save_freq = 10
 # Training Loop
 epoch = 0
 iteration = 0
+
 while True:
     batch_losses = []
     for imgs, targets in train_DataLoader:
@@ -142,14 +143,14 @@ while True:
                                               result['micro/f1'],
                                               result['macro/f1'],
                                               result['samples/f1']))
-
             model.train()
         iteration += 1
 
     loss_value = np.mean(batch_losses)
     print("epoch:{:2d} iter:{:3d} train: loss:{:.3f}".format(epoch, iteration, loss_value))
-    if epoch % save_freq == 0:
-        checkpoint_save(model, save_path, epoch)
+    if epoch+1 % save_freq == 0:
+        # checkpoint_save(model, save_path, epoch)
+        torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_ResNext.pkl')
     epoch += 1
     if max_epoch_number < epoch:
         break
