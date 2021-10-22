@@ -31,12 +31,12 @@ warnings.filterwarnings("ignore")
 from tqdm import tqdm_notebook as tqdm
 
 
-input_dir = os.path.join('public/img_dir')
+input_dir = os.path.join('data/')
 train_dir = os.path.join(input_dir,'train')
 test_dir  = os.path.join(input_dir,'test1')
-labels_csv= os.path.join(input_dir,'classes.txt')
-train_csv = os.path.join(input_dir,'train_labels.txt')
-resnet_weights_path = os.path.join('resnet50.pth')
+labels_csv= os.path.join(input_dir,'../classes.txt')
+train_csv = os.path.join(input_dir,'../train_labels.txt')
+resnet_weights_path = os.path.join('models/resnet50_food.pth')
 
 
 
@@ -180,8 +180,8 @@ print(f'Test Features: {features.shape}\n')
 
 """# Model Using Resnet50"""
 
-resnet_cls = models.resnet50()
-resnet_cls.load_state_dict(torch.load(resnet_weights_path))
+resnet_cls = models.resnet50(pretrained=True)
+# resnet_cls.load_state_dict(torch.load(resnet_weights_path))
 
 from torchvision import models
 resnet = models.resnet101(pretrained=True)
@@ -295,7 +295,8 @@ for test_batch in tqdm(test_loader,disable = DISABLE_TQDM):
 
 time_elapsed = time.time() - since 
 print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
-torch.save(NeuralNet, "ResNetFood")
+
+torch.save(NeuralNet, "resnet50_food.pth")
 """# Generating submission """
 
 predicted_class_idx = []

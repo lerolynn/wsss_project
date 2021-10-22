@@ -17,3 +17,7 @@ submission/segmentation/*
 
 *.png
 *.jpg
+*.pth
+
+models/*
+!models/.gitkeep
