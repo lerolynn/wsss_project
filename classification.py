@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
-# from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import SubsetRandomSampler
 import numpy as np
 from PIL import Image
@@ -22,16 +22,17 @@ from collections import OrderedDict
 CS701-Team 9: Multi-class classification model
 Last upddate: 2021-10-12
 Reference: https://blog.csdn.net/MiaoB226/article/details/89504131
+Author: Geng, Minghong
 """
 
 # check if gpu is available
 use_gpu = torch.cuda.is_available()
-evaluate = False
+evaluate = True
 # model_selected = "alexnet"
 # model_selected = "densenet"
 model_selected = "resnext"
-
-batch_size = 64
+num_epochs = 20
+batch_size = 128
 
 # Define the transformers
 data_transforms = {
@@ -212,20 +213,30 @@ def predict(input, model, device):
   with torch.no_grad():
     input=input.to(device)
     out = model(input)
-
-    accuracy_th = 0.5
+    # softmax_out = torch.nn.functional.softmax(out[0], dim=0)
+    # sigmoid_out = torch.nn.functional.sigmoid(out[0])
+    # accuracy_th = 0.5
+    accuracy_th = 0.2
     pred_result = torch.sigmoid(out)
-    pred_result = out > accuracy_th
-    pred_result = pred_result.float()
-    pred_result_lst = torch.nonzero(pred_result)
-    pre = []
-    if len(pred_result_lst)==0:
-        _, pred_max = torch.max(out.data, 1)  # the actual label number starts from 0
-        pre.append(1+pred_max.item())
-    else:
+    # pred_result = out > accuracy_th
+    # pred_result = pred_result.float()
+    # pred_result_lst = torch.nonzero(pred_result)
+    pred_result_pos = [int(i > 0.2) for i in pred_result[0]]
 
-        for i in pred_result_lst:
-            pre.append(1+i[1].item())  # the actual label number starts from 0
+    pre = []
+    if pred_result_pos.count(1) == 0:
+        # _, pred_max = torch.max(out.data, 1)  # the actual label number starts from 0
+        _, pred_top_two = torch.topk(out.data, k=2, dim=1)
+        for i in pred_top_two:
+            pre.append(1 + i.item())
+    # pre = []
+    # if len(pred_result_lst)==0:
+    #     _, pred_max = torch.max(out.data, 1)  # the actual label number starts from 0
+    #     pre.append(1+pred_max.item())
+    else:
+        pre = [index+1 for index, value in enumerate(pred_result_pos) if value == 1]
+        # for i in pred_result_lst:
+        #     pre.append(1+i[1].item())  # the actual label number starts from 0
     return pre
 
 
@@ -261,6 +272,8 @@ def calculate_acuracy_mode_two(model_pred, labels):
     for i in range(model_pred.shape[0]):
         temp_label = torch.zeros(1, model_pred.shape[1])
         temp_label[0,pred_label_locate[i]] = 1
+        # temp_label.cuda()
+        # labels.cuda()
         target_one_num = torch.sum(labels[i])
         true_predict_num = torch.sum(temp_label * labels[i])
         # 对每一幅图像进行预测准确率的计算
@@ -272,7 +285,7 @@ def calculate_acuracy_mode_two(model_pred, labels):
 
 ## Classification Model
 # Train and evaluate the network (all layers participate in the training)
-def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
+def train_model(model, criterion, optimizer, scheduler, num_epochs):
     # Sigmoid_fun = nn.Sigmoid()
     since = time.time()
 
@@ -281,9 +294,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
         print('-' * 10)
 
         # 每训练一个epoch，验证一下网络模型
-        for phase in ['train', 'val', 'test']:
-        # for phase in ['train']:
-        # for phase in ['train']:
+        for phase in ['train', 'validation']:
+
             running_loss = 0.0
             running_precision = 0.0
             running_recall = 0.0
@@ -308,11 +320,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
                     # loss = criterion(Sigmoid_fun(outputs), labels)
                     loss = criterion(outputs, labels)
                     # 这里根据自己的需求选择模型预测结果准确率的函数
-                    precision, recall = calculate_acuracy_mode_one(outputs, labels)
+                    # precision, recall = calculate_acuracy_mode_two(outputs, labels)
                     # precision, recall = calculate_acuracy_mode_one(Sigmoid_fun(outputs), labels)
                     # precision, recall = calculate_acuracy_mode_two(Sigmoid_fun(outputs), labels)
-                    running_precision += precision
-                    running_recall += recall
+                    # running_precision += precision
+                    # running_recall += recall
                     batch_num += 1
                     # 反传梯度
                     loss.backward()
@@ -338,12 +350,14 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
                         outputs = model(inputs)
                         # 计算Loss值
                         # BCELoss的输入（1、网络模型的输出必须经过sigmoid；2、标签必须是float类型的tensor）
-                        loss = criterion(Sigmoid_fun(outputs), labels)
+                        loss = criterion(outputs, labels)
+                        # loss = criterion(Sigmoid_fun(outputs), labels)
                         # 计算一个epoch的loss值和准确率
                         running_loss += loss.item() * inputs.size(0)
 
                         # 这里根据自己的需求选择模型预测结果准确率的函数
-                        precision, recall = calculate_acuracy_mode_one(Sigmoid_fun(outputs), labels)
+                        precision, recall = calculate_acuracy_mode_one(outputs, labels)
+                        # precision, recall = calculate_acuracy_mode_one(Sigmoid_fun(outputs), labels)
                         # precision, recall = calculate_acuracy_mode_two(Sigmoid_fun(outputs), labels)
                         running_precision += precision
                         running_recall += recall
@@ -356,7 +370,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=300):
             epoch_recall = running_recall / batch_num
             print('{} Recall: {:.4f} '.format(phase, epoch_recall))
             if (epoch+1) % 50 == 0:
-                torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_densenet121.pkl')
+                torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_resnext.pkl')
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
@@ -420,9 +434,8 @@ if __name__ == '__main__':
         model = models.resnext101_32x8d(pretrained=True)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, 103)
-        for param in model.parameters():
-            param.requires_grad = False
-
+        # for param in model.parameters():  # Frozen layers that we don't want to train
+        #     param.requires_grad = False
     if use_gpu:
         model = model.cuda()
 
@@ -442,15 +455,15 @@ if __name__ == '__main__':
 
         # 定义学习率的更新方式，每5个epoch修改一次学习率
         exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=5, gamma=0.1)
-        train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=300)
+        train_model(model, criterion, optimizer_ft, exp_lr_scheduler, num_epochs)
 
     else:  # test the model on the public data given in the contest
         # test_model("The_9_epoch_model.pklThemodel_AlexNet.pkl", "cpu")
-        model.load_state_dict(
-            torch.load("The_9_epoch_model.pklThemodel_AlexNet.pkl",
-                       map_location=torch.device('cpu')
+        model.load_state_dict(  # load the weights into the model
+            torch.load("The_99_epoch_resnext.pkl",
+                       map_location=torch.device('cuda')
                        )
-        )  # load the weights in the models
+        )
         fp = open("data/val_label.txt", 'r')
         val_predection = open("data/val_prediction.txt", "w")
 
@@ -462,7 +475,7 @@ if __name__ == '__main__':
             img = Image.open("data/test1/" + images).convert('RGB')
             img = data_transforms['val'](img)
             img = img.unsqueeze(0)
-            ans = predict(img, model, "cpu")
+            ans = predict(img, model, "cuda")
             line = information[0]
             for label in ans:
                 line += " " + str(label)
