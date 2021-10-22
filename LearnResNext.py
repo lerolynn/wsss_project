@@ -95,7 +95,7 @@ def calculate_metrics(pred, target, threshold=0.5):
 
 # -----------------------------------------   Training   ---------------------------------------------------------------
 batch_size = 32
-max_epoch_number = 50 
+max_epoch_number = 50
 learning_rate = 1e-3
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # TODO: Check if this BCE loss is the correct one, as we are selecting sigmoid function to generate the output.
