@@ -57,21 +57,21 @@ def get_device(cuda):
         print("Device: CPU")
     return device
 
-def load_images(image_paths):
-    print(image_paths)
-    images = []
-    # raw_images = []
-    print("Images:")
-    for i, image_path in enumerate(image_paths):
-        print("\t#{}: {}".format(i, image_path))
-        image, raw_image = preprocess(image_path)
-        images.append(image)
-        # raw_images.append(raw_image)
-    return images
+# def load_images(image_paths):
+#     print(image_paths)
+#     images = []
+#     # raw_images = []
+#     print("Images:")
+#     for i, image_path in enumerate(image_paths):
+#         print("\t#{}: {}".format(i, image_path))
+#         image, raw_image = preprocess(image_path)
+#         images.append(image)
+#         # raw_images.append(raw_image)
+#     return images
 
 def load_image(image_path):
     images = []
-    image, raw_image = preprocess(image_path)
+    image = preprocess(image_path)
     images.append(image)
 
     return images
@@ -84,11 +84,12 @@ def get_classtable():
             line = line.strip().split(",", 1)
             classes.append(line[1])
             class_dict[line[1]] = line[0]
-    # print(classes)
+    print(classes)
+    print(class_dict)
     return classes
 
 def preprocess(image_path):
-    print(image_path)
+    # print(image_path)
     raw_image = cv2.imread(image_path)
     raw_image = cv2.resize(raw_image, (224,) * 2)
     image = transforms.Compose(
@@ -97,7 +98,8 @@ def preprocess(image_path):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )(raw_image[..., ::-1].copy())
-    return image, raw_image
+    del raw_image
+    return image
 
 def save_gradcam(filename, gcam, raw_image, paper_cmap=False):
     gcam = gcam.cpu().numpy()
@@ -110,50 +112,35 @@ def save_gradcam(filename, gcam, raw_image, paper_cmap=False):
     cv2.imwrite(filename, np.uint8(gcam))
 
 def update_mask(numpy_mask, gcam, img_id):
-    # cv2.imshow("1",numpy_mask)
-    # cv2.waitKey(0) 
+
     gcam = gcam.cpu().numpy()
-    # cmap = cm.jet_r(gcam)[..., :3] * 255.0
     cmap = gcam * 255.0
-    #  Filter those values below arbitrary number of 2/3
     cmap[cmap < 3*255/4] = 0
     cmap[cmap >= 3*255/4] = img_id
+
     mask = (numpy_mask == 0) & (cmap != 0)
     #  Update numpy mask
     numpy_mask[mask] =  img_id
+    del gcam,cmap
     return numpy_mask
 
 def save_mask(filename, numpy_mask, img_id):
     numpy_mask = (numpy_mask.astype(np.float))
     cv2.imwrite(filename, np.uint8(numpy_mask))
+    del numpy_mask,filename,img_id
 
-def make_cam(device, model,data_dir, image_paths, target_layer, topk, output_dir, cuda):
+def make_cam(device, model, classes, image_paths, target_layer, topk, output_dir, cuda):
     """
     Visualize model responses given multiple images
     """   
-    # Synset words
-    classes = get_classtable()
-
-    image_name = image_paths.strip().split("/")[2]
+    image_name = image_paths.strip().split("/")[3]
     image_name = image_name.strip().split(".")[0]
 
     image = load_image(image_paths)
     image = torch.stack(image).to(device)
 
-    # image_names = []
-
-    # for filename in os.listdir(data_dir):
-    #     if filename.endswith(".jpg"):
-    #         image_names.append(os.path.join(data_dir, filename))
-    
-    # print(image_names)
-
-    # Images
-    # images = load_images(image_names)
-    # images = torch.stack(images).to(device)
-
     # =========================================================================
-    print("Backpropagation. GradCAM:")
+    # print("Backpropagation. GradCAM:")
 
     bp = BackPropagation(model)
     gcam = GradCAM(model)
@@ -161,45 +148,37 @@ def make_cam(device, model,data_dir, image_paths, target_layer, topk, output_dir
     probs, ids = bp.forward(image)  # sorted
     _ = gcam.forward(image)
 
-    # for j in range(len(images)):
     #  Create empty mask of size 224 by 224
     numpy_mask = np.zeros((224,224))
     for i in range(topk):
 
-        # Grad-CAM
+        # == Backward pass and generate Grad-CAM activation regions ==
         gcam.backward(ids[:, [i]])
-        # print(ids[:, [i]])
         regions = gcam.generate(target_layer)
 
         # convert tensor to cpu memory then convert to numpy  
         img_id = int(ids[0,i].cpu().numpy())
-        # print(img_id)
         print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i]], probs[0, i]))
 
-        # Grad-CAM
-        # save_gradcam(
-        #     filename=os.path.join(output_dir,"{}-gradcam-{}-{}.png".format(image_name, probs[0, i], classes[ids[0, i]]),
-        #     ),
-        #     gcam=regions[0, 0],
-        #     raw_image=raw_image[0],
-        # )
+        # =========== Save Grad-CAM =============
+        # gradcam_filename = os.path.join(output_dir,"{}-gradcam-{}-{}.png".format(image_name, probs[0, i], classes[ids[0, i]]))
+        # save_gradcam(gradcam_filename,regions[0, 0],image[0])
 
+        #  == Update numpy mask for each activation layer ==
         numpy_mask = update_mask(numpy_mask, regions[0, 0], img_id)
         
-    mask_filename = os.path.join("mask/","{}-mask.png".format(image_name))
-    save_mask(mask_filename,numpy_mask,img_id)  
+    mask_filename = os.path.join("mask/","{}_label.jpg".format(image_name))
+    save_mask(mask_filename,numpy_mask,img_id) 
 
-    del bp,gcam,probs,ids, image,classes, numpy_mask,img_id
-    gc.collect()
-    torch.cuda.empty_cache()
-    print(torch.cuda.memory_summary())
+    # Clear memory for cuda 
+    # bp.clear_mem()
+    gcam.clear_mem()
+    # del device, model, classes, image_paths,target_layer,topk,output_dir,cuda
+    # del image_name,image
+    # del bp,gcam,probs,ids,_
 
 def main():
-
     device = get_device(True)
-    
-    # images, raw_images = load_images(data_dir)
-    # print(image_name)
 
     # Model from torchvision
     model = Resnext50(103) 
@@ -208,12 +187,32 @@ def main():
     model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
     model.eval()
 
-    data_dir = "../data/train"
-    for filename in os.listdir(data_dir):
-        if filename.endswith(".jpg"):
-            print(filename)
-            make_cam(device, model,data_dir, os.path.join(data_dir, filename), "base_model.layer4", 3, "./results", True)
+    # Synset words
+    classes = get_classtable()
 
+    #  Store the number of labels each image has
+    img_label_count = {}
+    with open('data/sorted_train_labels.txt','r') as train_file:
+        train_cls_labels = train_file.readlines()
+
+        for img_label in train_cls_labels:
+            img_label_list = img_label.split(" ")
+            img_label_count[img_label_list[0]] = len(img_label_list) -1
+        
+        # print(img_label_count)
+
+    data_dir = "../data/train"
+
+    for img_filename in img_label_count:
+        print(img_filename)
+        img_filepath =  os.path.join(data_dir, img_filename)
+        label_count = img_label_count[img_filename]
+        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results", True)
+        del img_filename
+        
+        # gc.collect()
+        # torch.cuda.empty_cache()
+        # print(torch.cuda.memory_summary())
 
 if __name__ == "__main__":
     main()

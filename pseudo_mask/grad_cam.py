@@ -3,6 +3,7 @@
 
 from collections import Sequence
 
+import gc
 import numpy as np
 import torch
 import torch.nn as nn
@@ -25,8 +26,8 @@ class _BaseWrapper(object):
     def forward(self, image):
         self.image_shape = image.shape[2:]
         self.logits = self.model(image)
-        self.probs = F.softmax(self.logits, dim=1)
-        return self.probs.sort(dim=1, descending=True)  # ordered results
+        probs = F.softmax(self.logits, dim=1)
+        return probs.sort(dim=1, descending=True)  # ordered results
 
     def backward(self, ids):
         """
@@ -46,6 +47,10 @@ class _BaseWrapper(object):
         for handle in self.handlers:
             handle.remove()
 
+    def clear_mem(self):
+        del self.logits, self.model
+        # gc.collect()
+        # torch.cuda.empty_cache()
 
 class BackPropagation(_BaseWrapper):
     def forward(self, image):
@@ -56,8 +61,6 @@ class BackPropagation(_BaseWrapper):
         gradient = self.image.grad.clone()
         self.image.grad.zero_()
         return gradient
-
-
 
 class GradCAM(_BaseWrapper):
     """
@@ -115,4 +118,3 @@ class GradCAM(_BaseWrapper):
         gcam = gcam.view(B, C, H, W)
 
         return gcam
-
