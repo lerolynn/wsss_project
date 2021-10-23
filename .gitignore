@@ -14,3 +14,13 @@ submission/pseudo_label/*
 
 submission/segmentation/*
 !submission/segmentation/.gitkeep
+
+*.png
+*.jpg
+*.pth
+*.pkl
+
+models/*
+!models/.gitkeep
+pseudo_mask/models/resnet50Model
+resnet50Model_statedict
