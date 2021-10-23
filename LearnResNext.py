@@ -159,9 +159,9 @@ while True:
     loss_value = np.mean(batch_losses)
 
     print("epoch:{:2d} iter:{:3d} train: loss:{:.3f}".format(epoch, iteration, loss_value))
-    if epoch+1 % save_freq == 0:
+    if (epoch+1) % save_freq == 0:
         # checkpoint_save(model, save_path, epoch)
-        torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_ResNext.pkl')
+        torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_ResNext' + date + n_experiments + '.pkl')
         print("Save model:" + 'The_' + str(epoch) + '_epoch_ResNext' + date + n_experiments + '.pkl')
     epoch += 1
     if max_epoch_number < epoch:
