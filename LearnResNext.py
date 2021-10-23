@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset  # DataLoader
+from torch.utils.data import Dataset, DataLoader
 # from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import SubsetRandomSampler
 import numpy as np
@@ -16,11 +16,13 @@ import time
 from torch.optim import lr_scheduler
 from pathlib import Path
 from collections import OrderedDict
-from dataloader import DataLoader
+
+# from dataloader import DataLoader
 from dataloader.DataLoader import my_Data_Set
 from dataloader.DataLoader import data_transforms
 from dataloader.DataLoader import Load_Image_Information_Train
 from dataloader.DataLoader import Load_Image_Information_Test
+# from classification import Models
 from classification.Models import Resnext50
 
 from sklearn.metrics import precision_score
@@ -32,8 +34,8 @@ use_gpu = torch.cuda.is_available()
 evaluate = False
 batch_size = 32
 # model_selected = "alexnet"
-model_selected = "densenet"
-# model_selected = "resnext"
+# model_selected = "densenet"
+model_selected = "resnext"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # -------------------------------------------   Data   -----------------------------------------------------------------
@@ -74,6 +76,7 @@ dataset_sizes = {'train': train_Data.__len__(),
 # ------------------------------------------   Model   -----------------------------------------------------------------
 if model_selected == "resnext":
     model = Resnext50(103)
+    model = model.to(device)
 model.train()
 
 
@@ -94,14 +97,14 @@ def calculate_metrics(pred, target, threshold=0.5):
 
 
 # -----------------------------------------   Training   ---------------------------------------------------------------
-batch_size = 32
-max_epoch_number = 50
+batch_size = 60
+max_epoch_number = 500
 learning_rate = 1e-3
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # TODO: Check if this BCE loss is the correct one, as we are selecting sigmoid function to generate the output.
 criterion = nn.BCELoss()
 
-test_freq = 1
+test_freq = 200
 save_freq = 10
 
 # Training Loop
@@ -148,9 +151,10 @@ while True:
 
     loss_value = np.mean(batch_losses)
     print("epoch:{:2d} iter:{:3d} train: loss:{:.3f}".format(epoch, iteration, loss_value))
-    if epoch+1 % save_freq == 0:
+    if epoch % save_freq == 0:
         # checkpoint_save(model, save_path, epoch)
         torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_ResNext.pkl')
+        print("Save model:" + 'The_' + str(epoch) + '_epoch_ResNext.pkl' + "1023")
     epoch += 1
     if max_epoch_number < epoch:
         break
