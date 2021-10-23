@@ -24,20 +24,25 @@ from dataloader.DataLoader import Load_Image_Information_Train
 from dataloader.DataLoader import Load_Image_Information_Test
 # from classification import Models
 from classification.Models import Resnext50
+from classification.Models import ResNet50
 
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 
+import warnings
+warnings.filterwarnings('always')
 # -------------------------------------------   Parameters   -----------------------------------------------------------
 use_gpu = torch.cuda.is_available()
 evaluate = False
-batch_size = 32
+batch_size = 16
 # model_selected = "alexnet"
 # model_selected = "densenet"
 model_selected = "resnext"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+date = "1023"
+n_experiments = "exp_1"
 # -------------------------------------------   Data   -----------------------------------------------------------------
 train_Data = my_Data_Set(r'data/train_label.txt',
                          transform=data_transforms['train'],
@@ -77,6 +82,9 @@ dataset_sizes = {'train': train_Data.__len__(),
 if model_selected == "resnext":
     model = Resnext50(103)
     model = model.to(device)
+if model_selected == "resnet50":
+    model = ResNet50(103)
+    model = model.to(device)
 model.train()
 
 
@@ -97,15 +105,14 @@ def calculate_metrics(pred, target, threshold=0.5):
 
 
 # -----------------------------------------   Training   ---------------------------------------------------------------
-batch_size = 60
-max_epoch_number = 500
-learning_rate = 1e-3
+max_epoch_number = 50
+learning_rate = 0.0001
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # TODO: Check if this BCE loss is the correct one, as we are selecting sigmoid function to generate the output.
 criterion = nn.BCELoss()
 
-test_freq = 200
-save_freq = 10
+test_freq = 1000
+save_freq = 10  # save model at every 10 epochs
 
 # Training Loop
 epoch = 0
@@ -148,13 +155,14 @@ while True:
                                               result['samples/f1']))
             model.train()
         iteration += 1
-
+    print("This epoch trained on {:2d} images.".format(iteration))
     loss_value = np.mean(batch_losses)
+
     print("epoch:{:2d} iter:{:3d} train: loss:{:.3f}".format(epoch, iteration, loss_value))
-    if epoch % save_freq == 0:
+    if epoch+1 % save_freq == 0:
         # checkpoint_save(model, save_path, epoch)
         torch.save(model.state_dict(), 'The_' + str(epoch) + '_epoch_ResNext.pkl')
-        print("Save model:" + 'The_' + str(epoch) + '_epoch_ResNext.pkl' + "1023")
+        print("Save model:" + 'The_' + str(epoch) + '_epoch_ResNext' + date + n_experiments + '.pkl')
     epoch += 1
     if max_epoch_number < epoch:
         break
