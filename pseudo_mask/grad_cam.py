@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-#
-# Author:   Kazuto Nakashima
-# URL:      http://kazuto1011.github.io
-# Created:  2017-05-26
 
 from collections import Sequence
 
@@ -95,6 +91,7 @@ class GradCAM(_BaseWrapper):
                 self.handlers.append(module.register_backward_hook(save_grads(name)))
 
     def _find(self, pool, target_layer):
+        # print(pool.keys())
         if target_layer in pool.keys():
             return pool[target_layer]
         else:

@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-#
-# Author:   Kazuto Nakashima
-# URL:      http://kazuto1011.github.io
-# Created:  2017-05-18
 
 from __future__ import print_function
 
@@ -18,6 +14,18 @@ import torch
 import torch.nn.functional as F
 from torchvision import models, transforms
 
+import torchvision
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import torchvision.models as models
+import torchvision.transforms as transforms
+from torch.utils.data import Dataset  # DataLoader
+# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import SubsetRandomSampler
+
+import gc
+
 from grad_cam import (
     BackPropagation,
     GradCAM,
@@ -26,6 +34,22 @@ from grad_cam import (
 # if a model includes LSTM, such as in image captioning,
 # torch.backends.cudnn.enabled = False
 
+class Resnext50(nn.Module):
+    def __init__(self, n_classes):
+        super().__init__()
+        resnet = models.resnext50_32x4d(pretrained=True)
+        resnet.fc = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(in_features=resnet.fc.in_features, out_features=512),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(p=0.3),
+            nn.Linear(512, n_classes)
+        )
+        self.base_model = resnet
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigm(self.base_model(x))
 
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
@@ -61,26 +85,25 @@ def load_image(image_path):
 
     return images, raw_images
 
-def get_classtable():
-    classes = []
-    with open("samples/synset_words.txt") as lines:
-        for line in lines:
-            line = line.strip().split(" ", 1)[1]
-            line = line.split(", ", 1)[0].replace(" ", "_")
-            classes.append(line)
-    return classes
-
 # def get_classtable():
 #     classes = []
-#     class_dict = {}
-#     with open("data/classes.txt") as lines:
+#     with open("samples/synset_words.txt") as lines:
 #         for line in lines:
-#             line = line.strip().split(",", 1)
-    
-#             classes.append(line[1])
-#             class_dict[line[1]] = line[0]
-#             print(class_dict)
+#             line = line.strip().split(" ", 1)[1]
+#             line = line.split(", ", 1)[0].replace(" ", "_")
+#             classes.append(line)
 #     return classes
+
+def get_classtable():
+    classes = []
+    class_dict = {}
+    with open("data/classes.txt") as lines:
+        for line in lines:
+            line = line.strip().split(",", 1)
+            classes.append(line[1])
+            class_dict[line[1]] = line[0]
+    # print(classes)
+    return classes
 
 def preprocess(image_path):
     print(image_path)
@@ -125,10 +148,10 @@ def update_mask(numpy_mask, gcam, img_id):
     
 
     # PLACEHOLDER class - mod 255
-    cmap[cmap >= 3*255/4] = img_id % 255
+    cmap[cmap >= 3*255/4] = img_id
     mask = (numpy_mask == 0) & (cmap != 0)
     #  Update numpy mask
-    numpy_mask[mask] =  img_id % 255
+    numpy_mask[mask] =  img_id
 
     # cv2.imshow("1",numpy_mask)
     # cv2.waitKey(0) 
@@ -171,9 +194,6 @@ def save_sensitivity(filename, maps):
     maps = cv2.resize(maps, (224, 224), interpolation=cv2.INTER_NEAREST)
     cv2.imwrite(filename, maps)
 
-def main():
-    make_cam(('samples/train/00000009.jpg'), "layer4", 3, "./results", True)
-
 def make_cam(image_paths, target_layer, topk, output_dir, cuda):
     """
     Visualize model responses given multiple images
@@ -182,18 +202,19 @@ def make_cam(image_paths, target_layer, topk, output_dir, cuda):
     image_name = image_paths.strip().split("/")[2]
     image_name = image_name.strip().split(".")[0]
 
-    print(image_name)
+    # print(image_name)
 
     # Synset words
     classes = get_classtable()
 
     # Model from torchvision
-    model = models.resnet50(pretrained=True)
-    model.load_state_dict(torch.load("models/resnet50_food.pth"))
+    model = Resnext50(103) 
 
     model.to(device)
-    model.eval()
+    model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
 
+    model.eval()
+    # print(model)
     # Images
     image, raw_image = load_image(image_paths)
     image = torch.stack(image).to(device)
@@ -210,6 +231,8 @@ def make_cam(image_paths, target_layer, topk, output_dir, cuda):
     print("Backpropagation:")
 
     bp = BackPropagation(model)
+
+
     probs, ids = bp.forward(image)  # sorted
 
     print("Grad-CAM/Guided Backpropagation/Guided Grad-CAM:")
@@ -220,37 +243,40 @@ def make_cam(image_paths, target_layer, topk, output_dir, cuda):
     numpy_mask = np.zeros((224,224))
 
     for i in range(topk):
+
         # Grad-CAM
         gcam.backward(ids[:, [i]])
         # print("ID")
         # print(ids[:, [i]])
         regions = gcam.generate(target_layer)
 
-        for j in range(len(image)):
-            print("\t#{}: {} ({:.5f})".format(j, classes[ids[j, i]], probs[j, i]))
+        # convert tensor to cpu memory then convert to numpy  
+        img_id = int(ids[0,i].cpu().numpy())
+        # print(img_id)
+        print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i]], probs[0, i]))
 
-            # convert tensor to cpu memory then convert to numpy  
-            img_id = int(ids[j,i].cpu().numpy())
-            print(img_id)
+        # Grad-CAM
+        save_gradcam(
+            filename=os.path.join(output_dir,"{}-gradcam-{}-{}.png".format(image_name, probs[0, i], classes[ids[0, i]]),
+            ),
+            gcam=regions[0, 0],
+            raw_image=raw_image[0],
+        )
 
-            # Grad-CAM
-            save_gradcam(
-                filename=os.path.join(
-                    output_dir,
-                    "{}-gradcam-{}-{}.png".format(
-                        image_name, target_layer, classes[ids[j, i]]
-                    ),
-                ),
-                gcam=regions[j, 0],
-                raw_image=raw_image[j],
-            )
-
-            # mask_filename = os.path.join("mask/","{}-mask-{}-{}.png".format(j, target_layer, classes[ids[j, i]]))
-            # save_mask(mask_filename,regions[j, 0],img_id)
-            numpy_mask = update_mask(numpy_mask, regions[j, 0], img_id)
+        # mask_filename = os.path.join("mask/","{}-mask-{}-{}.png".format(j, target_layer, classes[ids[j, i]]))
+        # save_mask(mask_filename,regions[j, 0],img_id)
+        numpy_mask = update_mask(numpy_mask, regions[0, 0], img_id)
         
-        mask_filename = os.path.join("mask/","{}-mask.png".format(image_name))
-        save_mask(mask_filename,numpy_mask,img_id)       
+    mask_filename = os.path.join("mask/","{}-mask.png".format(image_name))
+    save_mask(mask_filename,numpy_mask,img_id)       
+
+def main():
+    data_dir = "samples/train"
+    for filename in os.listdir(data_dir):
+        if filename.endswith(".jpg"):
+            print(filename)
+            make_cam(os.path.join(data_dir, filename), "base_model.layer4", 3, "./results", True)
+
 
 if __name__ == "__main__":
     main()

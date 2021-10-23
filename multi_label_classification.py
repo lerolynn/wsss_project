@@ -296,7 +296,11 @@ for test_batch in tqdm(test_loader,disable = DISABLE_TQDM):
 time_elapsed = time.time() - since 
 print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
 
-torch.save(NeuralNet, "resnet50_food.pth")
+torch.save(NeuralNet, "resnet50Model")
+torch.save(NeuralNet.state_dict(), "resnet50Model_statedict")
+# torch.save(NeuralNet.state_dict(), "resnet_state_dict.pth")
+
+
 """# Generating submission """
 
 predicted_class_idx = []
