@@ -26,3 +26,4 @@ pseudo_mask/models/resnet50Model
 resnet50Model_statedict
 
 *.zip
+*.pt
