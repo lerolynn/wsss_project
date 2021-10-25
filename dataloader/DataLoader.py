@@ -27,6 +27,8 @@ train_DataLoader = DataLoader(train_Data,
 data_transforms = {
     'train': transforms.Compose([
         transforms.Resize(256),
+        # crop the images into size 227*227
+        # TODO: Don't do the resize!
         transforms.RandomResizedCrop(227),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),

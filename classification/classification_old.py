@@ -18,6 +18,8 @@ from torch.optim import lr_scheduler
 from pathlib import Path
 from collections import OrderedDict
 
+from collections import OrderedDict
+
 """
 CS701-Team 9: Multi-class classification model
 Last upddate: 2021-10-12
@@ -33,6 +35,7 @@ evaluate = True
 model_selected = "resnext"
 num_epochs = 20
 batch_size = 128
+
 
 data_transforms = {
     'train': transforms.Compose([
@@ -432,7 +435,6 @@ if __name__ == '__main__':
         model.fc = nn.Linear(num_ftrs, 103)
         # for param in model.parameters():  # Frozen layers that we don't want to train
         #     param.requires_grad = False
-
     if use_gpu:
         model = model.cuda()
 
