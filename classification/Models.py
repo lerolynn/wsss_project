@@ -53,6 +53,45 @@ class Resnext50(nn.Module):
     def forward(self, x):
         return self.sigm(self.base_model(x))
 
+class Resnext50_1024_1(nn.Module):
+    def __init__(self, n_classes):
+        super().__init__()
+        resnet = models.resnext50_32x4d(pretrained=True)
+        resnet.fc = nn.Sequential(
+            nn.Dropout(p=0.3),
+            nn.Linear(in_features=resnet.fc.in_features, out_features=512),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(p=0.3),
+            nn.Linear(512, n_classes)
+        )
+        self.base_model = resnet
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigm(self.base_model(x))
+
+class Resnext50_1024_2(nn.Module):
+    """
+    Three layers of the FC module.
+    """
+    def __init__(self, n_classes):
+        super().__init__()
+        resnet = models.resnext50_32x4d(pretrained=True)
+        resnet.fc = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(in_features=resnet.fc.in_features, out_features=1024),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(p=0.3),
+            nn.Linear(1024, 512),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(p=0.3),
+            nn.Linear(512, n_classes)
+        )
+        self.base_model = resnet
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigm(self.base_model(x))
 
 class Resnext50_old(nn.Module):
     def __init__(self, n_classes):
