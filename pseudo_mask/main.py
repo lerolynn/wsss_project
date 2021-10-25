@@ -186,12 +186,12 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
         # print(repr(regions))
 
         # convert tensor to cpu memory then convert to numpy  
-        img_id = int(ids[0,i].cpu().numpy())
+        img_id = int(ids[0,i].cpu().numpy()) + 1
         # print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i] + 1], probs[0, i]))
 
         # =========== Save Grad-CAM =============
         if output_gradcam:
-            gradcam_filename = os.path.join(output_dir,"{}-gradcam-{}.png".format(image_name, classes[ids[0, i]]))
+            gradcam_filename = os.path.join(output_dir,"{}-gradcam-{}.png".format(image_name, classes[ids[0, i] + 1]))
             save_gradcam(gradcam_filename,regions[0, 0],raw_image)
 
         #  == Update numpy mask for each activation layer ==
@@ -219,7 +219,7 @@ def main():
     model.to(device)
     # model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
 
-    model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_149_epoch_ResNext1023exp_1.pkl", map_location=device))
     print(dict(model.named_modules()))
     model.eval()
 
