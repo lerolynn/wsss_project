@@ -63,21 +63,27 @@ def get_classtable():
             line = line.strip().split(",", 1)
             classes.append(line[1])
             class_dict[line[1]] = line[0]
-    print(classes)
-    print(class_dict)
+    # print(classes)
+    # print(class_dict)
     return classes
 
 def load_image(image_path):
     # image= preprocess(image_path)
-    image = preprocess(image_path)
+    image,orig_dim,red_fact = preprocess(image_path)
     images = [image]
     # return images 
-    return images
+    return images,orig_dim,red_fact
 
 def preprocess(image_path):
     # print(image_path)
     raw_image = cv2.imread(image_path)
-    raw_image = cv2.resize(raw_image, (224,) * 2)
+    shape = raw_image.shape
+
+    # Reduce image size so gpu has enough memory to process
+    reduction_factor = round((raw_image.shape[0] *raw_image.shape[1])/100000)
+    # print(reduction_factor)
+    if reduction_factor != 0:
+        raw_image = cv2.resize(raw_image, (int(raw_image.shape[1]/reduction_factor),int(raw_image.shape[0]/reduction_factor)))
     image = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -85,12 +91,12 @@ def preprocess(image_path):
         ]
     )(raw_image[..., ::-1].copy())
     # del image
-    return image
+    return image,shape,reduction_factor
 
 # === FOR SAVING GRADCAM IMAGES ===========
 def load_image_raw(image_path):
     # image= preprocess(image_path)
-    image,raw_image = preprocess(image_path)
+    image,raw_image = preprocess_raw(image_path)
     images = [image]
     # return images 
     return images,raw_image
@@ -98,7 +104,7 @@ def load_image_raw(image_path):
 def preprocess_raw(image_path):
     # print(image_path)
     raw_image = cv2.imread(image_path)
-    raw_image = cv2.resize(raw_image, (224,) * 2)
+    # raw_image = cv2.resize(raw_image, (224,) * 2)
     image = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -115,7 +121,7 @@ def save_gradcam(filename, gcam, raw_image, paper_cmap=False):
         alpha = gcam[..., None]
         gcam = alpha * cmap + (1 - alpha) * raw_image
     else:
-        gcam = (cmap.astype(np.float)) / 2
+        gcam = (cmap.astype(np.float) + raw_image.astype(np.float)) / 2
     cv2.imwrite(filename, np.uint8(gcam))
 # ============================
 
@@ -128,14 +134,19 @@ def update_mask(numpy_mask, gcam, img_id):
     cmap[cmap < threshold] = 0
     cmap[cmap >= threshold] = img_id
 
+    # Check numpy nan to remove those with zero weights
+    if (np.isnan(np.sum(gcam))):
+        return numpy_mask
+
     mask = (numpy_mask == 0) & (cmap != 0)
     #  Update numpy mask
     numpy_mask[mask] =  img_id
     del gcam,cmap
     return numpy_mask
 
-def save_mask(filename, numpy_mask, img_id):
+def save_mask(filename, numpy_mask, img_id,orig_dim):
     numpy_mask = (numpy_mask.astype(np.float))
+    numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]))
     cv2.imwrite(filename, np.uint8(numpy_mask))
     del numpy_mask,filename,img_id
 
@@ -152,16 +163,17 @@ def save_mask(filename, numpy_mask, img_id):
 
 
 # ======== Make Grad-CAM and Pseudo-labels ===============
-def make_cam(device, model, classes, image_paths, target_layer, topk, cuda):
+def make_cam(device, model, classes, image_paths, target_layer, topk, output_dir):
     """
     Generate pseudolabels and CAM
     """   
+    # == Get image name and load image
     img_ext = image_paths.strip().split("/")[3]
     image_name = img_ext.strip().split(".")[0]
 
     # == load image raw is to load raw images for gradcam ==
     # Otherwise use load_image for better efficiency
-    image = load_image(image_paths)
+    image,orig_dim,red_fact = load_image(image_paths)
     # image,raw_image = load_image_raw(image_paths)
     image = torch.stack((image)).to(device)
 
@@ -172,18 +184,24 @@ def make_cam(device, model, classes, image_paths, target_layer, topk, cuda):
     probs, ids = bp.forward(image)  # sorted
     _ = gcam.forward(image)
 
-    #  Create empty mask of size 224 by 224
-    numpy_mask = np.zeros((224,224))
+    #  Create empty mask of size 384,512
+    # print(orig_dim)
+
+    if red_fact != 0:
+        numpy_mask = np.zeros(((int(orig_dim[0]/red_fact), int(orig_dim[1]/red_fact))))
+    else:
+        numpy_mask = np.zeros(((int(orig_dim[0]), int(orig_dim[1]))))
     # img_cls = img_ext
     for i in range(topk):
 
         # == Backward pass and generate Grad-CAM activation regions ==
         gcam.backward(ids[:, [i]])
         regions = gcam.generate(target_layer)
+        # print(repr(regions))
 
         # convert tensor to cpu memory then convert to numpy  
         img_id = int(ids[0,i].cpu().numpy()) + 1
-        # print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i]+1], probs[0, i]))
+        # print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i] + 1], probs[0, i]))
 
         # =========== Save Grad-CAM =============
         # gradcam_filename = os.path.join(output_dir,"{}-gradcam-{}-{}.png".format(image_name, classes[ids[0, i]+1],probs[0, i]))
@@ -193,15 +211,15 @@ def make_cam(device, model, classes, image_paths, target_layer, topk, cuda):
         numpy_mask = update_mask(numpy_mask, regions[0, 0], img_id)
         # img_cls += " " + str(img_id)
 
-    mask_filename = os.path.join("mask/","{}_label.png".format(image_name))
-    save_mask(mask_filename,numpy_mask,img_id) 
+    mask_filename = os.path.join("mask/","{}.png".format(image_name))
+    save_mask(mask_filename,numpy_mask,img_id,orig_dim) 
     # img_cls += "\n"
     # print(img_cls)
 
     # return img_cls
 
     # Clear memory for cuda 
-    # bp.clear_mem()
+    bp.clear_mem()
     gcam.clear_mem()
     # del device, model, classes, image_paths,target_layer,topk,output_dir,cuda
     # del image_name,image
@@ -214,7 +232,10 @@ def main():
     model = Resnext50(103) 
 
     model.to(device)
+    # model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
+
     model.load_state_dict(torch.load("models/The_149_epoch_ResNext1023exp_1.pkl", map_location=device))
+    print(dict(model.named_modules()))
     model.eval()
 
     # Synset words
@@ -234,19 +255,19 @@ def main():
     data_dir = "../data/train"
 
     # with open('cam_classes.txt','w') as cls_file:
-
+    print(torch.cuda.memory_summary())
     for img_filename in img_label_count:
         print(img_filename)
         img_filepath =  os.path.join(data_dir, img_filename)
         label_count = img_label_count[img_filename]
-        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results", True)
+        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results")
         del img_filename
         # cls_file.write(img_cls)
         # del img_cls
     
-        # gc.collect()
-        # torch.cuda.empty_cache()
-        print(torch.cuda.memory_summary())
+        gc.collect()
+        torch.cuda.empty_cache()
+        # print(torch.cuda.memory_summary())
 
 if __name__ == "__main__":
     main()
