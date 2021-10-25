@@ -75,6 +75,7 @@ train_sampler = SubsetRandomSampler(train_indices)
 valid_sampler = SubsetRandomSampler(val_indices)
 train_DataLoader = DataLoader(train_Data, batch_size=batch_size, sampler=train_sampler)
 validation_Dataloader = DataLoader(train_Data, batch_size=batch_size, sampler=valid_sampler)
+
 # TODO: Test the model on the public data
 val_DataLoader = DataLoader(val_Data, batch_size=1)
 
