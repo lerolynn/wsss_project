@@ -41,7 +41,7 @@ data_transforms = {
 }
 
 def Load_Image_Information_Train(path):
-    image_Root_Dir = r'data/train'
+    image_Root_Dir = r'data/train_plus'
     iamge_Dir = os.path.join(image_Root_Dir, path)
     return Image.open(iamge_Dir).convert('RGB')
 
