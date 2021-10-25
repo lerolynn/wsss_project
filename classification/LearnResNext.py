@@ -115,7 +115,7 @@ def calculate_metrics(pred, target, threshold=0.5):
             }
 
 # -----------------------------------------   Training   ---------------------------------------------------------------
-max_epoch_number = 200
+max_epoch_number = 100
 learning_rate = 0.0001
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 # TODO: Check if this BCE loss is the correct one, as we are selecting sigmoid function to generate the output.
@@ -149,7 +149,6 @@ while True:
 
         if iteration % test_freq == 0:
             batch_validation_loss = []  # the validation loss
-
             model.eval()
             with torch.no_grad():
                 model_result = []
