@@ -23,14 +23,21 @@ train_Data = my_Data_Set(r'public/train_label.txt', transform=data_transforms['t
 train_DataLoader = DataLoader(train_Data,
                               batch_size=batch_size)
 '''
+# add on 10-25 21:00.
+brightness = (1, 10)
+contrast = (1, 10)
+saturation = (1, 10)
+hue = (0.2, 0.4)
 
 data_transforms = {
     'train': transforms.Compose([
         transforms.Resize(256),
+        transforms.ColorJitter(brightness, contrast, saturation, hue),
         # crop the images into size 227*227
-        # TODO: Don't do the resize!
-        transforms.RandomResizedCrop(227),
+        # transforms.RandomResizedCrop(227),  # commented on 10-25 21:00.
         transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),  # add on 10-25 21:00.
+        transforms.RandomGrayscale(p=0.1),  # add on 10-25 21:00.
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
@@ -43,7 +50,7 @@ data_transforms = {
 }
 
 def Load_Image_Information_Train(path):
-    image_Root_Dir = r'data/train_plus'
+    image_Root_Dir = r'data/train'
     iamge_Dir = os.path.join(image_Root_Dir, path)
     return Image.open(iamge_Dir).convert('RGB')
 
