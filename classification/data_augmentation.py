@@ -1,13 +1,14 @@
 """
 The data augmentation method of Group 9.
 """
-from skimage import io, transform
+from skimage import io, transform, filters
 from skimage import color, data_dir, data
 from skimage import exposure, img_as_float
 
 import numpy as np
 import os
 import re
+import cv2
 
 # CUR_PATH = './x-image2'
 #
@@ -103,6 +104,31 @@ def noise_from_dir(imagepath, savepath):
         file_name = re.findall('\d+', file_name)[0]
         io.imsave(savepath + "/" + file_name + '_ns' + '.jpg', coll[i])
         # io.imsave(savepath + '\\ns_' + np.str(i) + '.jpg', coll[i])
+
+# ------------------  gaussian blur-
+# -=================================================================
+def img_gaussian_blur(imgfile):
+    img = io.imread(imgfile)
+    return img
+    # kernel_size = (5, 5)
+    # sigma = 1.5
+    # blurred_img = filters.gaussian_filter(img, 2, multichannel=True, mode='reflect')
+
+    # img = cv2.imread(imgfile)
+    # img = cv2.GaussianBlur(img, kernel_size, sigma)
+    # new_imgName = "New_" + str(kernel_size[0]) + "_" + str(sigma) + "_" + imgName
+    # cv2.imwrite(new_imgName, img)
+    # return blurred_img
+
+def GaussianBlur_from_dir(imagepath, savepath):
+    str = imagepath + '\\*.jpg'
+    coll = io.ImageCollection(str, load_func=img_gaussian_blur)
+
+    # 循环保存图片
+    for i in range(len(coll)):
+        file_name = coll.files[i]
+        file_name = re.findall('\d+', file_name)[0]
+        io.imsave(savepath + "/" + file_name + '_blur' + '.jpg', coll[i])
 
 # # ############################
 # # # rotate 旋转图像 逆时针
@@ -241,4 +267,16 @@ def noise_from_dir(imagepath, savepath):
 # ----------------------------- generate -------------------------------------------------------------------------------
 # gray_from_dir(imagepath="data/train", savepath="data/train_augmented/grey")
 # pca_from_dir(imagepath="data/train", savepath="data/train_augmented/pca")
-noise_from_dir(imagepath="data/train", savepath="data/train_augmented/noise")
+# noise_from_dir(imagepath="data/train", savepath="data/train_augmented/noise")
+
+GaussianBlur_from_dir(imagepath="data/train", savepath="data/train_augmented/blur")
+
+
+# imgName = "1.jpg"
+# kernel_size = (5, 5)
+# sigma = 1.5
+#
+# img = cv2.imread(imgName)
+# img = cv2.GaussianBlur(img, kernel_size, sigma)
+# new_imgName = "New_" + str(kernel_size[0]) + "_" + str(sigma) + "_" + imgName
+# cv2.imwrite(new_imgName, img)
