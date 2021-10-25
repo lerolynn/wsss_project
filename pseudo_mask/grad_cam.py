@@ -94,7 +94,7 @@ class GradCAM(_BaseWrapper):
                 self.handlers.append(module.register_backward_hook(save_grads(name)))
 
     def _find(self, pool, target_layer):
-        # print(pool.keys())
+        # print(len(pool))
         if target_layer in pool.keys():
             return pool[target_layer]
         else:
@@ -104,8 +104,9 @@ class GradCAM(_BaseWrapper):
         fmaps = self._find(self.fmap_pool, target_layer)
         grads = self._find(self.grad_pool, target_layer)
         weights = F.adaptive_avg_pool2d(grads, 1)
-
+        # print(repr(grads))
         gcam = torch.mul(fmaps, weights).sum(dim=1, keepdim=True)
+
         gcam = F.relu(gcam)
         gcam = F.interpolate(
             gcam, self.image_shape, mode="bilinear", align_corners=False
@@ -116,5 +117,6 @@ class GradCAM(_BaseWrapper):
         gcam -= gcam.min(dim=1, keepdim=True)[0]
         gcam /= gcam.max(dim=1, keepdim=True)[0]
         gcam = gcam.view(B, C, H, W)
+
 
         return gcam
