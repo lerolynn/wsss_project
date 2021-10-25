@@ -96,6 +96,7 @@ class GradCAM(_BaseWrapper):
     def _find(self, pool, target_layer):
         # print(len(pool))
         if target_layer in pool.keys():
+            # print(repr(pool[target_layer]))
             return pool[target_layer]
         else:
             raise ValueError("Invalid layer name: {}".format(target_layer))
@@ -104,7 +105,7 @@ class GradCAM(_BaseWrapper):
         fmaps = self._find(self.fmap_pool, target_layer)
         grads = self._find(self.grad_pool, target_layer)
         weights = F.adaptive_avg_pool2d(grads, 1)
-        # print(repr(grads))
+        # print(repr(fmaps))
         gcam = torch.mul(fmaps, weights).sum(dim=1, keepdim=True)
 
         gcam = F.relu(gcam)
