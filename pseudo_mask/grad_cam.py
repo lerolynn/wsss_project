@@ -10,6 +10,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from tqdm import tqdm
 import torchvision
+import cv2
 
 
 class _BaseWrapper(object):
@@ -97,11 +98,10 @@ class GradCAM(_BaseWrapper):
 
     def generate(self, target_layer):
         fmaps = self._find(self.fmap_pool, target_layer)
+
         grads = self._find(self.grad_pool, target_layer)
         weights = F.adaptive_avg_pool2d(grads, 1)
-        # print(repr(fmaps))
         gcam = torch.mul(fmaps, weights).sum(dim=1, keepdim=True)
-        # print(gcam.shape)
         gcam = F.relu(gcam)
         gcam = F.interpolate(
             gcam, self.image_shape, mode="bilinear", align_corners=False
@@ -109,6 +109,7 @@ class GradCAM(_BaseWrapper):
 
         B, C, H, W = gcam.shape
         gcam = gcam.view(B, -1)
+        
         gcam -= gcam.min(dim=1, keepdim=True)[0]
         gcam /= gcam.max(dim=1, keepdim=True)[0]
         gcam = gcam.view(B, C, H, W)
@@ -150,24 +151,41 @@ class CAM(_BaseWrapper):
         else:
             raise ValueError("Invalid layer name: {}".format(target_layer))
 
-    def generate(self, target_layer):
+    def generate(self, target_layer, label_count):
+
+        ## top k class probability
+        topk_prob = self.probs.squeeze().tolist()[:label_count]
+        topk_arg = self.ids.squeeze().tolist()[:label_count]
+        # print(topk_prob)
+        # print(topk_arg)
+
+        # Get softmax weight
         params = list(self.model.parameters())
-        weights = torch.from_numpy(np.squeeze(params[-1].data.cpu().numpy())).cuda()
-        print(len(weights))
+        weights = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
 
-        fmaps = self._find(self.fmap_pool, 'base_model.fc')
-     
-        gcam = torch.matmul(fmaps, weights)
-        print(gcam.shape)
-        # gcam = F.relu(gcam)
-        # gcam = F.interpolate(
-        #     gcam, self.image_shape, mode="bilinear", align_corners=False
-        # )
+        #self.logit, self.probs, self.ids
+        # print("\nWEIGHTS SHAPE")
+        # print(weights.shape)
+        # print("\nFMAP SHAPE")
 
-        B, C, H, W = gcam.shape
-        gcam = gcam.view(B, -1)
-        gcam -= gcam.min(dim=1, keepdim=True)[0]
-        gcam /= gcam.max(dim=1, keepdim=True)[0]
-        gcam = gcam.view(B, C, H, W)
+        #  Get feature map
+        fmaps = self._find(self.fmap_pool, 'base_model.layer4')
+        B, C, H, W = fmaps.shape
 
-        return gcam
+        # print(fmaps.shape)
+        cam = torch.matmul(weights, fmaps.resize(B,C,H*W))
+
+        # print(cam.shape)
+        
+        min_val, min_args = torch.min(cam, dim=2, keepdim=True)
+        cam -= min_val
+        max_val, max_args = torch.max(cam, dim=2, keepdim=True)
+        cam /= max_val
+
+        topk_cam = cam.view(1, -1, H, W)[0,topk_arg]
+        # print(topk_cam.shape)
+        topk_cam = F.interpolate(topk_cam.unsqueeze(0), (self.image_shape[0],self.image_shape[1]), mode="bilinear", align_corners=False).squeeze(0)
+        
+        topk_cam = torch.split(topk_cam, 1)
+        # print(topk_cam[0].shape)
+        return topk_cam
