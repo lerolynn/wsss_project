@@ -19,7 +19,6 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
 
-
 import gc
 
 from grad_cam import (
@@ -113,31 +112,13 @@ def preprocess(image_path, output_cam):
         return image,shape,reduction_factor
 
 # ==== Update and save masks =======
-def update_mask(numpy_mask, max_activations, gcam, img_id):
-    gcam = gcam.cpu().numpy() * 255.0
-    # pix_class = np.zeros((gcam.shape[0], gcam.shape[1]))
-    cmap = gcam 
-    # x = np.stack(pix_class,gcam)
-    # print(x.shape)
-
-    # Above certain half threshold, save to 
-
-    threshold = 255 * 1/2
-    cmap[cmap < threshold] = 0
-    cmap[cmap >= threshold] = img_id
-
-    # Save gcam, find the largest activation
-
-    # Check numpy nan to remove those with zero weights
-    if (np.isnan(np.sum(gcam))):
-        return numpy_mask
-
-    # If the image doesn't already have a class and if cmap has a class
-    mask = (numpy_mask == 0) & (cmap != 0)
-    #  Update numpy mask
-    numpy_mask[mask] =  img_id
-    # del gcam,cmap
-    return numpy_mask
+def generate_mask(cam_activations, img_labels):
+    img_labels = np.asarray(img_labels)
+    cam_activations = np.asarray(cam_activations)
+    max_activation = cam_activations.argmax(axis=0)
+    pseudo_label = img_labels[max_activation]
+    del cam_activations,max_activation
+    return pseudo_label
 
 def save_mask(filename, numpy_mask, img_id,orig_dim):
     numpy_mask = (numpy_mask.astype(np.float))
@@ -162,30 +143,29 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
         image,orig_dim,red_fact = load_image(image_paths,output_gradcam)
 
     image = torch.stack((image)).to(device)
-    # ======= Run backpropagation and GradCAM ===========================
+    # ======= Initialize backpropagation and GradCAM ====
     bp = BackPropagation(model)
     gcam = GradCAM(model)
-
-    probs, ids = bp.forward(image)  # sorted
+    probs, ids = bp.forward(image)
     _ = gcam.forward(image)
 
-    #  Create empty mask of size 384,512
-    # print(orig_dim)
-
+    # Save the dimension of numpy array
     if red_fact != 0:
-        numpy_mask = np.zeros(((int(orig_dim[0]/red_fact), int(orig_dim[1]/red_fact))))
+        numpy_dim = (int(orig_dim[0]/red_fact), int(orig_dim[1]/red_fact))
     else:
-        numpy_mask = np.zeros(((int(orig_dim[0]), int(orig_dim[1]))))
-    # img_cls = img_ext
-    max_activations = np.zeros(((2,int(orig_dim[0]), int(orig_dim[1]))))
+        numpy_dim = (int(orig_dim[0]), int(orig_dim[1]))
+
+    # Empty list to add cam activations and labels - 0 for background
+    cam_activations = [np.zeros(numpy_dim)]
+    img_labels = [0]
+
     for i in range(label_count):
 
         # == Backward pass and generate Grad-CAM activation regions ==
         gcam.backward(ids[:, [i]])
         regions = gcam.generate(target_layer)
-        # print(repr(regions))
 
-        # convert tensor to cpu memory then convert to numpy  
+        # Get class of activation
         img_id = int(ids[0,i].cpu().numpy()) + 1
         # print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i] + 1], probs[0, i]))
 
@@ -194,21 +174,27 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
             gradcam_filename = os.path.join(output_dir,"{}-gradcam-{}.png".format(image_name, classes[ids[0, i] + 1]))
             save_gradcam(gradcam_filename,regions[0, 0],raw_image)
 
-        #  == Update numpy mask for each activation layer ==
-        numpy_mask = update_mask(numpy_mask, max_activations,regions[0, 0], img_id)
-        # img_cls += " " + str(img_id)
+        # == Process activations and add to list
+        cam_activation = regions[0,0].cpu().numpy()
+        # == Check for zero weights bug - ignore cam if NaN ==
+        if (np.isnan(np.sum(cam_activation))):
+            continue
 
+        activation_threshold = 0.5
+        cam_activation[cam_activation < activation_threshold] = 0
+
+        cam_activations.append(cam_activation)
+        img_labels.append(img_id)
+
+    # Generate and save pseudolabel
     mask_filename = os.path.join("mask/","{}.png".format(image_name))
-    save_mask(mask_filename,numpy_mask,img_id,orig_dim) 
-    # img_cls += "\n"
-    # print(img_cls)
+    pseudo_label = generate_mask(cam_activations, img_labels)
+    save_mask(mask_filename,pseudo_label,img_id,orig_dim) 
 
     # ========= Clear CUDA Memory ===========
     bp.clear_mem()
     gcam.clear_mem()
-    # del device, model, classes, image_paths,target_layer,topk,output_dir,cuda
-    # del image_name,image
-    # del bp,gcam,probs,ids,_  
+    del cam_activations,pseudo_label
 
 def main():
     device = get_device(True)
@@ -218,8 +204,8 @@ def main():
 
     model.to(device)
     # model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
-
-    model.load_state_dict(torch.load("models/The_149_epoch_ResNext1023exp_1.pkl", map_location=device))
+    # model.load_state_dict(torch.load("models/The_149_epoch_ResNext1023exp_1.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_9_epoch_ResNext1025exp_1.pkl", map_location=device))
     print(dict(model.named_modules()))
     model.eval()
 
@@ -238,19 +224,16 @@ def main():
         # print(img_label_count)
 
     data_dir = "../data/train"
-
-    # with open('cam_classes.txt','w') as cls_file:
-    # print(torch.cuda.memory_summary())
+    
     for img_filename in img_label_count:
         print(img_filename)
         img_filepath =  os.path.join(data_dir, img_filename)
         label_count = img_label_count[img_filename]
-        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",True)
+        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",False)
         del img_filename
-        # cls_file.write(img_cls)
     
-        gc.collect()
-        torch.cuda.empty_cache()
+    gc.collect()
+    torch.cuda.empty_cache()
         # print(torch.cuda.memory_summary())
 
 if __name__ == "__main__":
