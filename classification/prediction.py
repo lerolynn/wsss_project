@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataloader.DataLoader import my_Data_Set
 from dataloader.DataLoader import data_transforms
 from dataloader.DataLoader import Load_Image_Information_Train
-from dataloader.DataLoader import Load_Image_Information_Test
+from dataloader.DataLoader import Load_Image_Information_Val
 # from classification import Models
 from classification.Models import Resnext50
 from classification.Models import Resnext50_1024_2
@@ -39,7 +39,7 @@ batch_size = 32
 # model_selected = "densenet"
 model_selected = "resnext"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model_location = "The_149_epoch_ResNext1025exp_1.pkl"
+model_location = "D:/Documents/GitHub/dl_project/models/ResNext/1026-2_50-epochs/The_19_epoch_ResNext1026_exp_2.pkl"
 
 # predict the classes of the pictures
 def predict(input, model, device):
@@ -88,15 +88,15 @@ model.eval()
 # -----------------------------------------   Do Prediction   ----------------------------------------------------------
 model.load_state_dict(torch.load(model_location, map_location=device))
 
-fp = open("data/val_label.txt", 'r')
-val_prediction = open("data/val_prediction.txt", "w")
+fp = open("D:/Documents/GitHub/dl_project/data/val_label.txt", 'r')
+val_prediction = open("D:/Documents/GitHub/dl_project/data/val_prediction.txt", "w")
 
 for line in fp:
     line.strip('\n')
     line.rstrip()
     information = line.split()
     images = (information[0])
-    img = Image.open("data/test1/" + images).convert('RGB')
+    img = Image.open("D:/Documents/GitHub/dl_project/data/test1/" + images).convert('RGB')
     img = data_transforms['val'](img)
     img = img.unsqueeze(0)
     ans = predict(img, model, "cuda")
