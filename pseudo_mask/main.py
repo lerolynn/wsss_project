@@ -291,14 +291,14 @@ def main():
     device = get_device(True)
 
     # Model from torchvision
-    # model = Resnext50(103) 
-    model = Resnext101(103) 
+    model = Resnext50(103) 
+    # model = Resnext101(103) 
     model.to(device)
 
-    # model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
-    model.load_state_dict(torch.load("models/The_14_epoch_ResNext1026_exp_4.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_149_epoch_ResNext1025exp_1.pkl", map_location=device))
+    # model.load_state_dict(torch.load("models/The_14_epoch_ResNext1026_exp_4.pkl", map_location=device))
 
-    # print(dict(model.named_modules()))
+    print(dict(model.named_modules()))
     model.eval()
 
     # Synset words

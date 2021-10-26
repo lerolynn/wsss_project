@@ -160,19 +160,22 @@ class CAM(_BaseWrapper):
         # print(topk_arg)
 
         # Get softmax weight
+        print(self.model)
         params = list(self.model.parameters())
+        for i in params:
+            print(i.shape)
         weights = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
 
         #self.logit, self.probs, self.ids
-        # print("\nWEIGHTS SHAPE")
-        # print(weights.shape)
-        # print("\nFMAP SHAPE")
+        print("\nWEIGHTS SHAPE")
+        print(weights.shape)
+        print("\nFMAP SHAPE")
 
         #  Get feature map
         fmaps = self._find(self.fmap_pool, 'base_model.layer4')
+        print(fmaps.shape)
         B, C, H, W = fmaps.shape
 
-        # print(fmaps.shape)
         cam = torch.matmul(weights, fmaps.resize(B,C,H*W))
 
         # print(cam.shape)
