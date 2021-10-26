@@ -54,11 +54,11 @@ n_experiments = "exp_3"
 
 continue_training = False
 # -------------------------------------------   Data   -----------------------------------------------------------------
-train_Data = my_Data_Set(r'./labels/split_labels/train_split.txt',
+train_Data = my_Data_Set(r'./labels/split_labels_91/train_split.txt',
                          transform=data_transforms['train'],
                          loader=Load_Image_Information_Train)
 # TODO: Use the normal way to load the validaton data. Don't do filp or anything on it.
-val_Data = my_Data_Set(r'./labels/split_labels/val_split.txt',
+val_Data = my_Data_Set(r'./labels/split_labels_91/val_split.txt',
                        transform=data_transforms['val'],
                        loader=Load_Image_Information_Val)
 
