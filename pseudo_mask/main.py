@@ -18,13 +18,31 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
+import torchvision
 
 import gc
 
 from grad_cam import (
-    BackPropagation,
     GradCAM,
+    CAM
 )
+
+class Resnext101(nn.Module):
+    def __init__(self, n_classes):
+        super().__init__()
+        resnet = models.resnext101_32x8d(pretrained=True)
+        resnet.fc = nn.Sequential(
+            # nn.Dropout(p=0.2),
+            nn.Linear(in_features=resnet.fc.in_features, out_features=103),
+            # nn.LeakyReLU(0.1),
+            # nn.Dropout(p=0.3),
+            # nn.Linear(512, n_classes)
+        )
+        self.base_model = resnet
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigm(self.base_model(x))
 
 class Resnext50(nn.Module):
     def __init__(self, n_classes):
@@ -143,11 +161,11 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
         image,orig_dim,red_fact = load_image(image_paths,output_gradcam)
 
     image = torch.stack((image)).to(device)
-    # ======= Initialize backpropagation and GradCAM ====
-    bp = BackPropagation(model)
+    # ======= Initialize GradCAM ====
     gcam = GradCAM(model)
-    probs, ids = bp.forward(image)
-    _ = gcam.forward(image)
+    # cam = CAM(model)
+    probs, ids = gcam.forward(image)
+    # probs, ids = cam.forward(image)
 
     # Save the dimension of numpy array
     if red_fact != 0:
@@ -164,7 +182,7 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
         # == Backward pass and generate Grad-CAM activation regions ==
         gcam.backward(ids[:, [i]])
         regions = gcam.generate(target_layer)
-
+        # regions = cam.generate(target_layer)
         # Get class of activation
         img_id = int(ids[0,i].cpu().numpy()) + 1
         # print("\t#{}: {} ({:.5f})".format(img_id, classes[ids[0, i] + 1], probs[0, i]))
@@ -192,21 +210,26 @@ def make_cam(device, model, classes, image_paths, target_layer, label_count, out
     save_mask(mask_filename,pseudo_label,img_id,orig_dim) 
 
     # ========= Clear CUDA Memory ===========
-    bp.clear_mem()
+    # bp.clear_mem()
     gcam.clear_mem()
     del cam_activations,pseudo_label
+
+    # FOR DEBUGGING
+    img_labels[0] = img_ext
+    return ' '.join(map(str, img_labels))
 
 def main():
     device = get_device(True)
 
     # Model from torchvision
-    model = Resnext50(103) 
-
+    # model = Resnext50(103) 
+    model = Resnext101(103) 
     model.to(device)
+
     # model.load_state_dict(torch.load("models/The_10_epoch_ResNext.pkl", map_location=device))
-    # model.load_state_dict(torch.load("models/The_149_epoch_ResNext1023exp_1.pkl", map_location=device))
-    model.load_state_dict(torch.load("models/The_9_epoch_ResNext1025exp_1.pkl", map_location=device))
-    print(dict(model.named_modules()))
+    model.load_state_dict(torch.load("models/The_14_epoch_ResNext1026_exp_4.pkl", map_location=device))
+
+    # print(dict(model.named_modules()))
     model.eval()
 
     # Synset words
@@ -225,13 +248,19 @@ def main():
 
     data_dir = "../data/train"
     
+    f = open("cam_classes.txt", "w")
+
     for img_filename in img_label_count:
         print(img_filename)
         img_filepath =  os.path.join(data_dir, img_filename)
         label_count = img_label_count[img_filename]
-        make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",False)
+        img_cls = make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",True)
+        f.write(img_cls)
+        f.write("\n")
+        
         del img_filename
-    
+
+    f.close()
     gc.collect()
     torch.cuda.empty_cache()
         # print(torch.cuda.memory_summary())
