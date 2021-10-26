@@ -26,6 +26,7 @@ from dataloader.DataLoader import Load_Image_Information_Val
 from classification.Models import Resnext50
 from classification.Models import Resnext50_1024_2
 from classification.Models import Resnext50_1026_3
+from classification.Models import Resnext101
 from classification.Models import ResNet50
 
 from sklearn.metrics import precision_score
@@ -46,11 +47,11 @@ evaluate = False
 batch_size = 16
 # model_selected = "alexnet"
 # model_selected = "densenet"
-model_selected = "resnext"
+model_selected = "resnext101"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 date = "1026"
-n_experiments = "exp_3"
+n_experiments = "exp_4"
 
 continue_training = False
 # -------------------------------------------   Data   -----------------------------------------------------------------
@@ -94,6 +95,9 @@ dataset_sizes = {'train': train_Data.__len__(),
 # ------------------------------------------   Model   -----------------------------------------------------------------
 if model_selected == "resnext":
     model = Resnext50_1026_3(103)
+    model = model.to(device)
+if model_selected == "resnext101":
+    model = Resnext101(103)
     model = model.to(device)
 if model_selected == "resnet50":
     model = ResNet50(103)
