@@ -25,6 +25,7 @@ from dataloader.DataLoader import Load_Image_Information_Val
 # from classification import Models
 from classification.Models import Resnext50
 from classification.Models import Resnext50_1024_2
+from classification.Models import Resnext101
 from classification.Models import ResNet50
 
 from sklearn.metrics import precision_score
@@ -37,9 +38,9 @@ evaluate = False
 batch_size = 32
 # model_selected = "alexnet"
 # model_selected = "densenet"
-model_selected = "resnext"
+model_selected = "resnext101"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model_location = "D:/Documents/GitHub/dl_project/models/ResNext/1026-2_50-epochs/The_19_epoch_ResNext1026_exp_2.pkl"
+model_location = r"D:\Documents\GitHub\dl_project\models\ResNext\1026_4-20-epochs\The_9_epoch_ResNext1026_exp_4.pkl"
 
 # predict the classes of the pictures
 def predict(input, model, device):
@@ -80,6 +81,9 @@ def predict(input, model, device):
 if model_selected == "resnext":
     model = Resnext50(103)
     model = model.to(device)
+if model_selected == "resnext101":
+    model = Resnext101(103)
+    model = model.to(device)
 if model_selected == "resnet50":
     model = ResNet50(103)
     model = model.to(device)
@@ -89,7 +93,7 @@ model.eval()
 model.load_state_dict(torch.load(model_location, map_location=device))
 
 fp = open("D:/Documents/GitHub/dl_project/data/val_label.txt", 'r')
-val_prediction = open("D:/Documents/GitHub/dl_project/data/val_prediction.txt", "w")
+val_prediction = open("D:/Documents/GitHub/dl_project/data/val_prediction_1026-4-20.txt", "w")
 
 for line in fp:
     line.strip('\n')
