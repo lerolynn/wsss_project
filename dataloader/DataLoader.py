@@ -31,31 +31,32 @@ hue = (0.2, 0.4)
 
 data_transforms = {
     'train': transforms.Compose([
-        transforms.Resize(256),
-        transforms.ColorJitter(brightness, contrast, saturation, hue),
+        transforms.Resize([256, 256]),
+        # transforms.ColorJitter(brightness, contrast, saturation, hue),
         # crop the images into size 227*227
         # transforms.RandomResizedCrop(227),  # commented on 10-25 21:00.
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),  # add on 10-25 21:00.
-        transforms.RandomGrayscale(p=0.1),  # add on 10-25 21:00.
+        # transforms.RandomGrayscale(p=0.1),  # add on 10-25 21:00.
+        # transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
     'val': transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(227),
+        transforms.Resize([256, 256]),
+        # transforms.CenterCrop(227),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ]),
 }
 
 def Load_Image_Information_Train(path):
-    image_Root_Dir = r'data/train'
+    image_Root_Dir = r'D:\Documents\GitHub\dl_project\data\train'
     iamge_Dir = os.path.join(image_Root_Dir, path)
     return Image.open(iamge_Dir).convert('RGB')
 
-def Load_Image_Information_Test(path):
-    image_Root_Dir = r'data/test1'
+def Load_Image_Information_Val(path):
+    image_Root_Dir = r'D:\Documents\GitHub\dl_project\data\train'
     iamge_Dir = os.path.join(image_Root_Dir, path)
     return Image.open(iamge_Dir).convert('RGB')
 
