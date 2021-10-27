@@ -17,7 +17,7 @@ from trainer import train_model
 
 @click.command()
 @click.option("--data-directory",
-              default="data_dir",
+              default="data_dir1",
               help="Specify the data directory.")
 @click.option("--exp_directory",
               default="food_dataset_out",
@@ -77,7 +77,7 @@ def segOutput(model):
 def main(data_directory, exp_directory, epochs, batch_size):
     # Create the deeplabv3 resnet101 model which is pretrained on a subset
     # of COCO train2017, on the 20 categories that are present in the Pascal VOC dataset.
-    model = createDeepLabv3()
+    model = createDeepLabv3(103)
     model.train()
     data_directory = Path(data_directory)
     # Create the experiment directory if not present
@@ -105,9 +105,15 @@ def main(data_directory, exp_directory, epochs, batch_size):
                     num_epochs=epochs)
 
     # Save the trained model
-    torch.save(model, exp_directory / 'weights.pt')
+    torch.save(model, exp_directory / 'weights_7_15.pt')
     #segOutput(model)
 
 
 if __name__ == "__main__":
-    main("data_dir","food_dataset_out",100,4)
+    main("data_dir1","food_dataset_out",15,4)
+    import gc
+
+    gc.collect()
+
+    torch.cuda.empty_cache()
+    
