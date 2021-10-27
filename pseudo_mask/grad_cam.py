@@ -98,9 +98,10 @@ class GradCAM(_BaseWrapper):
 
     def generate(self, target_layer):
         fmaps = self._find(self.fmap_pool, target_layer)
-
         grads = self._find(self.grad_pool, target_layer)
+        # print(self.grad_pool)
         weights = F.adaptive_avg_pool2d(grads, 1)
+        # print(weights)
         gcam = torch.mul(fmaps, weights).sum(dim=1, keepdim=True)
         gcam = F.relu(gcam)
         gcam = F.interpolate(
@@ -160,20 +161,26 @@ class CAM(_BaseWrapper):
         # print(topk_arg)
 
         # Get softmax weight
-        print(self.model)
+        # print(self.model)
         params = list(self.model.parameters())
-        for i in params:
-            print(i.shape)
-        weights = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
+        # for i in params:
+        #     print(i.shape)
+
+        # For models with 2FC layers
+        weights_1 = torch.from_numpy(np.squeeze(params[-4].data.cpu().numpy())).cuda()
+        weights_2 = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
+        weights = torch.matmul(weights_2, weights_1)
+
+        # weights = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
 
         #self.logit, self.probs, self.ids
-        print("\nWEIGHTS SHAPE")
-        print(weights.shape)
-        print("\nFMAP SHAPE")
+        # print("\nWEIGHTS SHAPE")
+        # print(weights.shape)
+        # print("\nFMAP SHAPE")
 
         #  Get feature map
         fmaps = self._find(self.fmap_pool, 'base_model.layer4')
-        print(fmaps.shape)
+        # print(fmaps.shape)
         B, C, H, W = fmaps.shape
 
         cam = torch.matmul(weights, fmaps.resize(B,C,H*W))
