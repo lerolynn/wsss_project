@@ -86,7 +86,7 @@ def load_data(image_list, mask_list):
 
 def data_generator(image_list, mask_list):
     dataset = tf.data.Dataset.from_tensor_slices((image_list, mask_list))
-    dataset = dataset.map(load_data, num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.map(load_data, num_parallel_calls= tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
     return dataset
 
@@ -114,7 +114,7 @@ def convolution_block(
         dilation_rate=dilation_rate,
         padding="same",
         use_bias=use_bias,
-        kernel_initializer=keras.initializers.HeNormal(),
+        kernel_initializer=keras.initializers.RandomNormal(stddev=0.01),
     )(block_input)
     x = layers.BatchNormalization()(x)
     return tf.nn.relu(x)
