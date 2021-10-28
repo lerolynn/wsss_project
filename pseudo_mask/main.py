@@ -20,6 +20,9 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision
+from torchsummary import summary
+import pydensecrf.densecrf as dcrf
+import pydensecrf.utils as utils
 
 import gc
 
@@ -28,16 +31,25 @@ from grad_cam import (
     CAM
 )
 
+# VARIABLES FOR CRFf
+MAX_ITER = 5
+
+POS_W = 3
+POS_XY_STD = 1
+Bi_W = 4
+Bi_XY_STD = 67
+Bi_RGB_STD = 3
+
 class Resnext101(nn.Module):
     def __init__(self, n_classes):
         super().__init__()
         resnet = models.resnext101_32x8d(pretrained=True)
         resnet.fc = nn.Sequential(
-            # nn.Dropout(p=0.2),
-            nn.Linear(in_features=resnet.fc.in_features, out_features=103),
-            # nn.LeakyReLU(0.1),
-            # nn.Dropout(p=0.3),
-            # nn.Linear(512, n_classes)
+            #nn.Dropout(p=0.3),
+            nn.Linear(in_features=resnet.fc.in_features, out_features=512),
+            nn.LeakyReLU(0.1),
+            #nn.Dropout(p=0.3),
+            nn.Linear(512, n_classes)
         )
         self.base_model = resnet
         self.sigm = nn.Sigmoid()
@@ -120,10 +132,11 @@ def preprocess(image_path, output_cam):
     raw_image = cv2.imread(image_path)
     shape = raw_image.shape
     # Reduce image size so gpu has enough memory to process
-    reduction_factor = math.floor((raw_image.shape[0] *raw_image.shape[1])/500000)
-    # print(reduction_factor)
-    if reduction_factor != 0:
-        raw_image = cv2.resize(raw_image, (int(raw_image.shape[1]/reduction_factor),int(raw_image.shape[0]/reduction_factor)))
+    reduction_factor = math.floor((raw_image.shape[0] *raw_image.shape[1])/100000)
+    # # print(reduction_factor)
+    # if reduction_factor != 0:
+    #     raw_image = cv2.resize(raw_image, (int(raw_image.shape[1]/reduction_factor),int(raw_image.shape[0]/reduction_factor)))
+    raw_image = cv2.resize(raw_image, (256,256))
     image = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -147,12 +160,56 @@ def generate_mask(cam_activations, img_labels):
     del cam_activations,max_activation
     return pseudo_label
 
-def save_mask(filename, numpy_mask, img_id,orig_dim):
+def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
+    # print(cam_activations)
+    print(img_labels)
 
+    activation_labels = np.zeros((104,256,256))
+    activation_labels[0] = np.full((256,256), 0.61)
+    for i in range(len(img_labels)):
+        if i != 0:
+            activation_labels[img_labels[i]] = cam_activations[i]
+
+    # # Size is 256 by 256
+    raw_image = cv2.imread(image_path)
+    red_image = cv2.resize(raw_image, (256,256))
+    # print(type(pseudo_label))
+    # pseudo_label = pseudo_label.astype(np.uint32)
+    labels = pseudo_label.flatten()
+    # print(red_image.shape)
+    # Example using the DenseCRF2D code
+
+    d = dcrf.DenseCRF2D(red_image.shape[1], red_image.shape[0], 104)
+    # get unary potentials (neg log probability)
+    # U = utils.unary_from_labels(labels, 104, gt_prob=0.7, zero_unsure=False)
+    U = utils.unary_from_softmax(activation_labels)
+    # print(labels.shape)
+    # print(U.shape)
+
+    d.setUnaryEnergy(U)
+    # This adds the color-independent term, features are the locations only.
+    d.addPairwiseGaussian(sxy=(3, 3), compat=3, kernel=dcrf.DIAG_KERNEL,
+                          normalization=dcrf.NORMALIZE_SYMMETRIC)
+
+    # This adds the color-dependent term, i.e. features are (x,y,r,g,b).
+    d.addPairwiseBilateral(sxy=(80, 80), srgb=(13, 13, 13), rgbim=red_image,
+                           compat=3,
+                           kernel=dcrf.DIAG_KERNEL,
+                           normalization=dcrf.NORMALIZE_SYMMETRIC)
+
+    # Run five inference steps.
+    Q = d.inference(5)
+
+    # Find out the most probable class for each pixel.
+    MAP = np.argmax(Q, axis=0)
+    return MAP.reshape((256,256))
+
+def save_mask(filename, numpy_mask, img_id,orig_dim):
     numpy_mask = (numpy_mask.astype(np.float))
-    numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]))
+    numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]), interpolation = cv2.INTER_NEAREST)
     cv2.imwrite(filename, np.uint8(numpy_mask))
-    
+    img_cls = list(map(int,set(numpy_mask.flatten())))
+    return img_cls
     del numpy_mask,filename,img_id
 
 # ===== Make CAM and Pseudo-labels ============
@@ -169,10 +226,12 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
         red_image,orig_dim,red_fact = load_image(image_paths,output_gradcam)
     
     # Save the reduced dimensions
-    if red_fact != 0:
-        red_dim = (int(orig_dim[0]/red_fact), int(orig_dim[1]/red_fact))
-    else:
-        red_dim = (int(orig_dim[0]), int(orig_dim[1]))
+    # if red_fact != 0:
+    #     red_dim = (int(orig_dim[0]/red_fact), int(orig_dim[1]/red_fact))
+    # else:
+    #     red_dim = (int(orig_dim[0]), int(orig_dim[1]))
+
+    red_dim = (256,256)
 
     red_image = torch.stack((red_image)).to(device)
 
@@ -196,8 +255,9 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        activation_threshold = 0.5
-        cam_activation[cam_activation < activation_threshold] = 0
+        # activation_threshold = 0.55
+        # cam_activation[cam_activation < activation_threshold] = 0
+
         cam_activations.append(cam_activation)
         img_labels.append(activation_id)
         if output_gradcam:
@@ -207,13 +267,17 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
     # ==== Generate Pseudolabels ===========
     mask_filename = os.path.join("mask/","{}.png".format(image_name))
     pseudo_label = generate_mask(cam_activations, img_labels)
-    save_mask(mask_filename,pseudo_label,activation_id,orig_dim) 
+    # img_cls = save_mask(mask_filename,pseudo_label,activation_id,orig_dim) 
 
+    dcrf_filename = os.path.join("dcrf/","{}.png".format(image_name))
+    dcrf_img = generate_dcrf(pseudo_label, image_paths, cam_activations,img_labels)
+    img_cls = save_mask(dcrf_filename,dcrf_img,activation_id,orig_dim) 
     # == Clear CUDA Memory ==
     cam.clear_mem()
-
-    img_labels[0] = img_ext
-    return ' '.join(map(str, img_labels))
+    img_cls.insert(0,img_ext)
+    print(img_cls)
+    # img_labels[0] = img_ext
+    return ' '.join(map(str,img_cls))
 
 # ======== Make Grad-CAM and Pseudo-labels ===============
 def make_gradcam(device, model,classes, image_paths, target_layer, label_count, output_dir, output_gradcam):
@@ -267,7 +331,7 @@ def make_gradcam(device, model,classes, image_paths, target_layer, label_count, 
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        activation_threshold = 0.5
+        activation_threshold = 0.55
         cam_activation[cam_activation < activation_threshold] = 0
 
         cam_activations.append(cam_activation)
@@ -291,14 +355,14 @@ def main():
     device = get_device(True)
 
     # Model from torchvision
-    model = Resnext50(103) 
-    # model = Resnext101(103) 
+    # model = Resnext50(103) 
+    model = Resnext101(103) 
     model.to(device)
 
-    model.load_state_dict(torch.load("models/The_149_epoch_ResNext1025exp_1.pkl", map_location=device))
-    # model.load_state_dict(torch.load("models/The_14_epoch_ResNext1026_exp_4.pkl", map_location=device))
+    # model.load_state_dict(torch.load("models/The_19_epoch_ResNext1026_exp_2.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_19_epoch_ResNext_101_1027_exp_3.pkl", map_location=device))
 
-    print(dict(model.named_modules()))
+    # print(dict(model.named_modules()))
     model.eval()
 
     # Synset words
@@ -317,7 +381,7 @@ def main():
 
     data_dir = "../data/train"
     
-    # f = open("cam_classes.txt", "w")
+    f = open("cam_classes.txt", "w")
 
     for img_filename in img_label_count:
         print(img_filename)
@@ -325,12 +389,13 @@ def main():
         label_count = img_label_count[img_filename]
         # img_cls = make_gradcam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",True)
         img_cls = make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",False)
-        # f.write(img_cls)
-        # f.write("\n")
+        # print(img_cls)
+        f.write(img_cls)
+        f.write("\n")
         
         del img_filename
 
-    # f.close()
+    f.close()
     gc.collect()
     torch.cuda.empty_cache()
         # print(torch.cuda.memory_summary())
