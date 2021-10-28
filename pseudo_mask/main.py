@@ -193,7 +193,7 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
 
     # This adds the color-dependent term, i.e. features are (x,y,r,g,b).
     d.addPairwiseBilateral(sxy=(80, 80), srgb=(13, 13, 13), rgbim=red_image,
-                           compat=10,
+                           compat=3,
                            kernel=dcrf.DIAG_KERNEL,
                            normalization=dcrf.NORMALIZE_SYMMETRIC)
 
@@ -202,15 +202,14 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
 
     # Find out the most probable class for each pixel.
     MAP = np.argmax(Q, axis=0)
-    print(set(MAP))
     return MAP.reshape((256,256))
 
 def save_mask(filename, numpy_mask, img_id,orig_dim):
-
     numpy_mask = (numpy_mask.astype(np.float))
-    numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]))
+    numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]), interpolation = cv2.INTER_NEAREST)
     cv2.imwrite(filename, np.uint8(numpy_mask))
-    
+    img_cls = list(map(int,set(numpy_mask.flatten())))
+    return img_cls
     del numpy_mask,filename,img_id
 
 # ===== Make CAM and Pseudo-labels ============
@@ -256,7 +255,7 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        # activation_threshold = 0.5
+        # activation_threshold = 0.55
         # cam_activation[cam_activation < activation_threshold] = 0
 
         cam_activations.append(cam_activation)
@@ -268,17 +267,17 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
     # ==== Generate Pseudolabels ===========
     mask_filename = os.path.join("mask/","{}.png".format(image_name))
     pseudo_label = generate_mask(cam_activations, img_labels)
-    # save_mask(mask_filename,pseudo_label,activation_id,orig_dim) 
+    # img_cls = save_mask(mask_filename,pseudo_label,activation_id,orig_dim) 
 
     dcrf_filename = os.path.join("dcrf/","{}.png".format(image_name))
     dcrf_img = generate_dcrf(pseudo_label, image_paths, cam_activations,img_labels)
-    save_mask(dcrf_filename,dcrf_img,activation_id,orig_dim) 
-
+    img_cls = save_mask(dcrf_filename,dcrf_img,activation_id,orig_dim) 
     # == Clear CUDA Memory ==
     cam.clear_mem()
-
-    img_labels[0] = img_ext
-    return ' '.join(map(str, img_labels))
+    img_cls.insert(0,img_ext)
+    print(img_cls)
+    # img_labels[0] = img_ext
+    return ' '.join(map(str,img_cls))
 
 # ======== Make Grad-CAM and Pseudo-labels ===============
 def make_gradcam(device, model,classes, image_paths, target_layer, label_count, output_dir, output_gradcam):
@@ -332,7 +331,7 @@ def make_gradcam(device, model,classes, image_paths, target_layer, label_count, 
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        activation_threshold = 0.9
+        activation_threshold = 0.55
         cam_activation[cam_activation < activation_threshold] = 0
 
         cam_activations.append(cam_activation)
@@ -382,7 +381,7 @@ def main():
 
     data_dir = "../data/train"
     
-    # f = open("cam_classes.txt", "w")
+    f = open("cam_classes.txt", "w")
 
     for img_filename in img_label_count:
         print(img_filename)
@@ -390,12 +389,13 @@ def main():
         label_count = img_label_count[img_filename]
         # img_cls = make_gradcam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",True)
         img_cls = make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",False)
-        # f.write(img_cls)
-        # f.write("\n")
+        # print(img_cls)
+        f.write(img_cls)
+        f.write("\n")
         
         del img_filename
 
-    # f.close()
+    f.close()
     gc.collect()
     torch.cuda.empty_cache()
         # print(torch.cuda.memory_summary())
