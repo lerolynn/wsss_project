@@ -11,7 +11,7 @@ with open('data/sorted_train_labels.txt','r') as train_file:
         img_label_list = img_label.split(" ")
         img_label_count[img_label_list[0]] = len(img_label_list) -1
 
-data_dir = "/home/lerolynn/smu/dl/dl_project/pseudo_mask/mask"
+data_dir = "/home/lerolynn/smu/dl/dl_project/pseudo_mask/dcrf"
 count = 0
 for img_filename in img_label_count:
     png_filename = img_filename.split(".")[0] + ".png"

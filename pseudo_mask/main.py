@@ -6,6 +6,8 @@ from __future__ import print_function
 import os, os.path
 import math
 
+from numpy.lib.function_base import gradient
+
 import cv2
 import matplotlib.cm as cm
 from matplotlib import pyplot as plt
@@ -96,7 +98,7 @@ def get_classtable():
     # print(classes)
     return classes
 
-# === FOR SAVING GRADCAM IMAGES ===========
+# === FOR SAVING CAM/GRADCAM IMAGES ===========
 def save_gradcam(filename, gcam, raw_image, paper_cmap=False):
     gcam = gcam.cpu().numpy()
     cmap = cm.jet_r(gcam)[..., :3] * 255.0
@@ -150,19 +152,36 @@ def preprocess(image_path, output_cam):
         return image,shape,reduction_factor
 
 # ==== Update and save masks =======
-def generate_mask(cam_activations, img_labels):
+def generate_mask(cam_activations, img_labels, gt_labels):
+    # == CODE TO IGNORE INVALID LABELS
+    # print(img_labels)
+    # invalid = []
+    # for index, label in enumerate(img_labels):
+    #     if label not in gt_labels and label != 0:
+    #         invalid.append(index)
+
+    # invalid.reverse()
+
+    # if len(invalid) != 0:
+    #     print("INVALID")
+    #     print(invalid)
+    #     for index in invalid:
+    #         img_labels.pop(index)
+    #         cam_activations.pop(index)
+    # ================================
 
     img_labels = np.asarray(img_labels)
     cam_activations = np.asarray(cam_activations)
     max_activation = cam_activations.argmax(axis=0)
     pseudo_label = img_labels[max_activation]
+    # print(img_labels)
 
     del cam_activations,max_activation
     return pseudo_label
 
 def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
     # print(cam_activations)
-    print(img_labels)
+    # print(img_labels)
 
     activation_labels = np.zeros((104,256,256))
     activation_labels[0] = np.full((256,256), 0.61)
@@ -176,9 +195,9 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
     # print(type(pseudo_label))
     # pseudo_label = pseudo_label.astype(np.uint32)
     labels = pseudo_label.flatten()
-    # print(red_image.shape)
-    # Example using the DenseCRF2D code
 
+    # Example using the DenseCRF2D code
+    # print(activation_labels.shape)
     d = dcrf.DenseCRF2D(red_image.shape[1], red_image.shape[0], 104)
     # get unary potentials (neg log probability)
     # U = utils.unary_from_labels(labels, 104, gt_prob=0.7, zero_unsure=False)
@@ -206,6 +225,7 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
 
 def save_mask(filename, numpy_mask, img_id,orig_dim):
     numpy_mask = (numpy_mask.astype(np.float))
+    # print(orig_dim)
     numpy_mask = cv2.resize(numpy_mask, (orig_dim[1],orig_dim[0]), interpolation = cv2.INTER_NEAREST)
     cv2.imwrite(filename, np.uint8(numpy_mask))
     img_cls = list(map(int,set(numpy_mask.flatten())))
@@ -213,9 +233,9 @@ def save_mask(filename, numpy_mask, img_id,orig_dim):
     del numpy_mask,filename,img_id
 
 # ===== Make CAM and Pseudo-labels ============
-def make_cam(device, model,classes, image_paths, target_layer, label_count, output_dir, output_gradcam):
+def make_cam(device, model,classes, image_paths, target_layer, label_count, gt_labels, output_dir, output_gradcam):
     # == Get image name and load image
-    img_ext = image_paths.strip().split("/")[3]
+    img_ext = image_paths.strip().split("/")[2]
     image_name = img_ext.strip().split(".")[0]
 
     # == load image raw is to load raw images for gradcam ==
@@ -232,7 +252,6 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
     #     red_dim = (int(orig_dim[0]), int(orig_dim[1]))
 
     red_dim = (256,256)
-
     red_image = torch.stack((red_image)).to(device)
 
     cam_activations = [np.zeros(red_dim)]
@@ -266,7 +285,7 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, outp
 
     # ==== Generate Pseudolabels ===========
     mask_filename = os.path.join("mask/","{}.png".format(image_name))
-    pseudo_label = generate_mask(cam_activations, img_labels)
+    pseudo_label = generate_mask(cam_activations, img_labels, gt_labels)
     # img_cls = save_mask(mask_filename,pseudo_label,activation_id,orig_dim) 
 
     dcrf_filename = os.path.join("dcrf/","{}.png".format(image_name))
@@ -360,8 +379,8 @@ def main():
     model.to(device)
 
     # model.load_state_dict(torch.load("models/The_19_epoch_ResNext1026_exp_2.pkl", map_location=device))
-    model.load_state_dict(torch.load("models/The_19_epoch_ResNext_101_1027_exp_3.pkl", map_location=device))
-
+    # model.load_state_dict(torch.load("models/The_19_epoch_ResNext_101_1027_exp_3.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_22_epoch_ResNext_101_1031.pkl", map_location=device))
     # print(dict(model.named_modules()))
     model.eval()
 
@@ -370,16 +389,19 @@ def main():
 
     #  Store the number of labels each image has
     img_label_count = {}
-    with open('data/sorted_train_labels.txt','r') as train_file:
+    img_labels = {}
+    with open('data/val_prediction.txt','r') as train_file:
         train_cls_labels = train_file.readlines()
 
         for img_label in train_cls_labels:
-            img_label_list = img_label.split(" ")
+            img_label_list = img_label.rstrip().split(" ")
             img_label_count[img_label_list[0]] = len(img_label_list) -1
+            img_labels[img_label_list[0]] = set(map(int,img_label_list[1:]))
         
         # print(img_label_count)
-
-    data_dir = "../data/train"
+    # print(img_label_count)
+    # print(img_labels)
+    data_dir = "data/test1"
     
     f = open("cam_classes.txt", "w")
 
@@ -387,8 +409,9 @@ def main():
         print(img_filename)
         img_filepath =  os.path.join(data_dir, img_filename)
         label_count = img_label_count[img_filename]
+        labels = img_labels[img_filename]
         # img_cls = make_gradcam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",True)
-        img_cls = make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, "./results",False)
+        img_cls = make_cam(device, model, classes, img_filepath, "base_model.layer4", label_count, labels, "./cams",False)
         # print(img_cls)
         f.write(img_cls)
         f.write("\n")
