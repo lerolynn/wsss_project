@@ -99,9 +99,7 @@ class GradCAM(_BaseWrapper):
     def generate(self, target_layer):
         fmaps = self._find(self.fmap_pool, target_layer)
         grads = self._find(self.grad_pool, target_layer)
-        # print(self.grad_pool)
         weights = F.adaptive_avg_pool2d(grads, 1)
-        # print(weights)
         gcam = torch.mul(fmaps, weights).sum(dim=1, keepdim=True)
         gcam = F.relu(gcam)
         gcam = F.interpolate(
@@ -153,39 +151,19 @@ class CAM(_BaseWrapper):
             raise ValueError("Invalid layer name: {}".format(target_layer))
 
     def generate(self, target_layer, label_count):
-
         ## top k class probability
-        topk_prob = self.probs.squeeze().tolist()[:label_count]
         topk_arg = self.ids.squeeze().tolist()[:label_count]
-        # print(topk_prob)
-        # print(topk_arg)
-
-        # Get softmax weight
-        # print(self.model)
         params = list(self.model.parameters())
-        # for i in params:
-        #     print(i.shape)
 
         # For models with 2FC layers
         weights_1 = torch.from_numpy(np.squeeze(params[-4].data.cpu().numpy())).cuda()
         weights_2 = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
         weights = torch.matmul(weights_2, weights_1)
 
-        # weights = torch.from_numpy(np.squeeze(params[-2].data.cpu().numpy())).cuda()
-
-        #self.logit, self.probs, self.ids
-        # print("\nWEIGHTS SHAPE")
-        # print(weights.shape)
-        # print("\nFMAP SHAPE")
-
         #  Get feature map
         fmaps = self._find(self.fmap_pool, 'base_model.layer4')
-        # print(fmaps.shape)
         B, C, H, W = fmaps.shape
-
         cam = torch.matmul(weights, fmaps.resize(B,C,H*W))
-
-        # print(cam.shape)
         
         min_val, min_args = torch.min(cam, dim=2, keepdim=True)
         cam -= min_val
@@ -193,9 +171,6 @@ class CAM(_BaseWrapper):
         cam /= max_val
 
         topk_cam = cam.view(1, -1, H, W)[0,topk_arg]
-        # print(topk_cam.shape)
         topk_cam = F.interpolate(topk_cam.unsqueeze(0), (self.image_shape[0],self.image_shape[1]), mode="bilinear", align_corners=False).squeeze(0)
-        
         topk_cam = torch.split(topk_cam, 1)
-        # print(topk_cam[0].shape)
         return topk_cam

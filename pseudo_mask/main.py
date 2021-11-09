@@ -180,8 +180,6 @@ def generate_mask(cam_activations, img_labels, gt_labels):
     return pseudo_label
 
 def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
-    # print(cam_activations)
-    # print(img_labels)
 
     activation_labels = np.zeros((104,256,256))
     activation_labels[0] = np.full((256,256), 0.61)
@@ -192,18 +190,9 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
     # # Size is 256 by 256
     raw_image = cv2.imread(image_path)
     red_image = cv2.resize(raw_image, (256,256))
-    # print(type(pseudo_label))
-    # pseudo_label = pseudo_label.astype(np.uint32)
-    labels = pseudo_label.flatten()
 
-    # Example using the DenseCRF2D code
-    # print(activation_labels.shape)
     d = dcrf.DenseCRF2D(red_image.shape[1], red_image.shape[0], 104)
-    # get unary potentials (neg log probability)
-    # U = utils.unary_from_labels(labels, 104, gt_prob=0.7, zero_unsure=False)
     U = utils.unary_from_softmax(activation_labels)
-    # print(labels.shape)
-    # print(U.shape)
 
     d.setUnaryEnergy(U)
     # This adds the color-independent term, features are the locations only.
@@ -212,7 +201,7 @@ def generate_dcrf(pseudo_label, image_path, cam_activations, img_labels):
 
     # This adds the color-dependent term, i.e. features are (x,y,r,g,b).
     d.addPairwiseBilateral(sxy=(80, 80), srgb=(13, 13, 13), rgbim=red_image,
-                           compat=3,
+                           compat=10,
                            kernel=dcrf.DIAG_KERNEL,
                            normalization=dcrf.NORMALIZE_SYMMETRIC)
 
@@ -274,8 +263,8 @@ def make_cam(device, model,classes, image_paths, target_layer, label_count, gt_l
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        # activation_threshold = 0.55
-        # cam_activation[cam_activation < activation_threshold] = 0
+        activation_threshold = 0.55
+        cam_activation[cam_activation < activation_threshold] = 0
 
         cam_activations.append(cam_activation)
         img_labels.append(activation_id)
@@ -350,8 +339,8 @@ def make_gradcam(device, model,classes, image_paths, target_layer, label_count, 
         if (np.isnan(np.sum(cam_activation))):
             continue
 
-        activation_threshold = 0.55
-        cam_activation[cam_activation < activation_threshold] = 0
+        # activation_threshold = 0.55
+        # cam_activation[cam_activation < activation_threshold] = 0
 
         cam_activations.append(cam_activation)
         img_labels.append(img_id)
@@ -379,8 +368,8 @@ def main():
     model.to(device)
 
     # model.load_state_dict(torch.load("models/The_19_epoch_ResNext1026_exp_2.pkl", map_location=device))
-    # model.load_state_dict(torch.load("models/The_19_epoch_ResNext_101_1027_exp_3.pkl", map_location=device))
-    model.load_state_dict(torch.load("models/The_22_epoch_ResNext_101_1031.pkl", map_location=device))
+    model.load_state_dict(torch.load("models/The_19_epoch_ResNext_101_1027_exp_3.pkl", map_location=device))
+    # model.load_state_dict(torch.load("models/The_22_epoch_ResNext_101_1031.pkl", map_location=device))
     # print(dict(model.named_modules()))
     model.eval()
 
@@ -390,7 +379,7 @@ def main():
     #  Store the number of labels each image has
     img_label_count = {}
     img_labels = {}
-    with open('data/val_prediction.txt','r') as train_file:
+    with open('data/sorted_train_labels2.txt','r') as train_file:
         train_cls_labels = train_file.readlines()
 
         for img_label in train_cls_labels:
@@ -401,7 +390,7 @@ def main():
         # print(img_label_count)
     # print(img_label_count)
     # print(img_labels)
-    data_dir = "data/test1"
+    data_dir = "data/train"
     
     f = open("cam_classes.txt", "w")
 
