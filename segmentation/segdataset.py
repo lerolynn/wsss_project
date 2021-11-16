@@ -46,8 +46,9 @@ class SegmentationDataset(VisionDataset):
             ValueError: If image_color_mode and mask_color_mode are either 'rgb' or 'grayscale'
         """
         super().__init__(root, transforms)
-        image_folder_path = Path(self.root) / image_folder
-        mask_folder_path = Path(self.root) / mask_folder
+        image_folder_path = Path("data/Train/Image")
+        print(image_folder_path)
+        mask_folder_path = Path("data/Train/Mask")
         if not image_folder_path.exists():
             raise OSError(f"{image_folder_path} does not exist.")
         if not mask_folder_path.exists():
